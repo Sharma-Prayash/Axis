@@ -1,0 +1,27 @@
+# Built outputs
+*.iml
+.gradle/
+build/
+local.properties
+
+# IDE
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Kotlin
+*.class
+
+# APK / AAB
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Keystore
+*.jks
+*.keystore
