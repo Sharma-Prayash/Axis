@@ -1,6 +1,7 @@
 package com.productivity.app.data.db
 
 import androidx.room.Database
+import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.productivity.app.data.dao.*
 import com.productivity.app.data.model.*
@@ -26,4 +27,23 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun checklistDao(): ChecklistDao
     abstract fun checklistItemDao(): ChecklistItemDao
     abstract fun noteLogDao(): NoteLogDao
+
+    companion object {
+        @Volatile
+        private var workerInstance: AppDatabase? = null
+
+        /**
+         * Provides a database instance for WorkManager workers that
+         * cannot use Hilt DI. Uses double-checked locking for thread safety.
+         */
+        fun getInstanceForWorker(context: android.content.Context): AppDatabase {
+            return workerInstance ?: synchronized(this) {
+                workerInstance ?: Room.databaseBuilder(
+                    context.applicationContext,
+                    AppDatabase::class.java,
+                    "productivity_database"
+                ).build().also { workerInstance = it }
+            }
+        }
+    }
 }

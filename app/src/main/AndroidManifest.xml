@@ -41,5 +41,23 @@
             </intent-filter>
         </receiver>
 
+        <!-- Alarm Receiver — fires notification when scheduled alarm triggers -->
+        <receiver
+            android:name=".service.AlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- Snooze Receiver — handles snooze action from notification -->
+        <receiver
+            android:name=".service.SnoozeReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- Done Receiver — handles mark-done action from notification -->
+        <receiver
+            android:name=".service.DoneReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
     </application>
 </manifest>

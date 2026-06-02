@@ -1,0 +1,129 @@
+# Personal Productivity System — Phase 1A Walkthrough
+
+This document outlines the foundation architectural components implemented during Phase 1A of the Personal Productivity System development.
+
+> [!NOTE]
+> Phase 1A establishes the foundation. All database tables, repositories, Hilt dependency injection bindings, navigation graphs, and core styling assets have been configured, enabling a compiling base project.
+
+---
+
+## Architectural Overview
+
+The application follows clean architecture principles with a decoupled layer design.
+
+```mermaid
+graph TD
+    UI[Compose Navigation / Views] --> VM[ViewModels - Phase 1B/C/D]
+    VM --> Repos[Repository Layer: combines DAOs]
+    Repos --> DAOs[Room DAOs]
+    DAOs --> DB[Room AppDatabase]
+    DI[Hilt AppModule] -.-> Repos
+    DI -.-> DB
+```
+
+1. **Presentation Layer (`ui`)**: UI scaffolding, typography, colors, navigation graph, and entry screens.
+2. **Data Layer (`data`)**: Database models, DAOs, repositories, and Hilt setup to manage SQLite transactions.
+3. **Service Layer (`service`)**: Handles system-level triggers (e.g. boot receiver) to restore application scheduling configurations.
+
+---
+
+## Implemented Components
+
+### 1. Build & Project Configuration
+
+The build configurations configure core Jetpack Compose, Room compiler processing via KSP, WorkManager, and Dagger Hilt:
+
+- **Root settings & plugins**: [settings.gradle.kts](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/settings.gradle.kts) and [build.gradle.kts](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/build.gradle.kts) at the root level define build setup and version catalog inclusions.
+- **Module gradle configuration**: [app/build.gradle.kts](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/build.gradle.kts) configures namespace `com.productivity.app`, target SDK 34, and dependencies for Room, Hilt, Compose BOM, Navigation, and WorkManager.
+- **System Manifest**: [AndroidManifest.xml](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/AndroidManifest.xml) registers essential permissions (`SCHEDULE_EXACT_ALARM`, `USE_EXACT_ALARM`, `RECEIVE_BOOT_COMPLETED`, `POST_NOTIFICATIONS`) and declares `ReminderBootReceiver`.
+
+---
+
+### 2. Database Entities (`data/model`)
+
+All 7 core SQLite entities are fully defined:
+
+- **[Reminder.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/Reminder.kt)**: Manages alarms with details like reminder types (medicine, travel, meeting, etc.), priorities (low, medium, high), recurrence rule strings, and snooze durations.
+- **[ScheduleEvent.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/ScheduleEvent.kt)**: Represents events, appointments, deadlines, and meetings including start/end timestamps and locations.
+- **[ProgressTracker.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/ProgressTracker.kt)**: Maps active courses and projects including total units, completed units count, and labels for active milestones.
+- **[ProgressUnit.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/ProgressUnit.kt)**: Individual units of work (e.g. course modules or project milestones) linked to `ProgressTracker` via Foreign Key cascade delete constraints.
+- **[Checklist.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/Checklist.kt)**: Manages checklists and marks template states for reusable templates.
+- **[ChecklistItem.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/ChecklistItem.kt)**: Specific tasks inside a checklist with completion states and sorting orders.
+- **[NoteLog.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/NoteLog.kt)**: Stores note metadata (type, date, tags) and holds deep-linking URLs to launch individual pages inside the Notion application.
+
+---
+
+### 3. Data Access Layer (`data/dao` & `data/db`)
+
+DAOs expose asynchronous queries utilizing Kotlin `Flow` or `suspend` functions:
+
+- **[ReminderDao.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/dao/ReminderDao.kt)**: Access queries by status, dates, and active boot scheduling flags.
+- **[ScheduleEventDao.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/dao/ScheduleEventDao.kt)**: Daily timeline queries and ranges.
+- **[ProgressTrackerDao.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/dao/ProgressTrackerDao.kt)** & **[ProgressUnitDao.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/dao/ProgressUnitDao.kt)**: Trackers by type, completed status calculations, and unit configurations.
+- **[ChecklistDao.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/dao/ChecklistDao.kt)** & **[ChecklistItemDao.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/dao/ChecklistItemDao.kt)**: Supports duplicate-from-template operations.
+- **[NoteLogDao.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/dao/NoteLogDao.kt)**: Searchable tags and groupings based on note category.
+- **[AppDatabase.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/db/AppDatabase.kt)**: Configures the main Room database instance with schema exports enabled.
+
+---
+
+### 4. Repositories (`data/repository`) & DI (`di`)
+
+Decoupled Repository interfaces with singleton bindings:
+
+- **[ReminderRepository.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/repository/ReminderRepository.kt)**: Abstracted CRUD and notification trigger triggers.
+- **[ScheduleRepository.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/repository/ScheduleRepository.kt)**: Manages agenda loading.
+- **[TrackerRepository.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/repository/TrackerRepository.kt)**: Unified module management for courses/projects.
+- **[ChecklistRepository.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/repository/ChecklistRepository.kt)**: Duplicates checklist structures from template collections.
+- **[NoteLogRepository.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/repository/NoteLogRepository.kt)**: Notes logs queries.
+- **[AppModule.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/di/AppModule.kt)**: Binds Room dependencies and references Repository implementations as Hilt singletons.
+
+---
+
+### 5. Application Entry & Navigation Structure
+
+- **[ProductivityApp.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ProductivityApp.kt)**: Initial application subclass tagged with `@HiltAndroidApp`.
+- **[MainActivity.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/MainActivity.kt)**: Enables edge-to-edge system overlays, configures a bottom NavigationBar matching standard route structures, and hosts `NavGraph`.
+- **[Screen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/navigation/Screen.kt)**: Maps screens (Dashboard, Reminders, Schedule, Trackers, Notes, Checklists) along with their outlined and filled icons. Defines bottom bar items (excluding Checklists which will be accessed from the home screen).
+- **[NavGraph.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/navigation/NavGraph.kt)**: Orchestrates routing for Compose screens with Dashboard as the initial start destination.
+
+---
+
+### 6. Design System (`ui/theme`)
+
+Implements a premium, minimalistic dark styling:
+
+- **[Color.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/theme/Color.kt)**: Employs a dark theme palette:
+  - Background: `#121212`
+  - Surface: `#1E1E1E`
+  - Primary Accent: `#7C8CFF` (Muted Indigo)
+  - Predefines task priority (low, medium, high) and reminder categories (medicine, travel, meeting, etc.) color specifications.
+- **[Type.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/theme/Type.kt)**: Typography configuration leveraging Material 3 type hierarchy metrics.
+- **[Theme.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/theme/Theme.kt)**: DarkColorScheme implementation managing system bar overlay colors automatically.
+
+---
+
+### 7. Core Screens (Placeholders)
+
+Minimalist boilerplate views ready for business logic wiring:
+
+- **[DashboardScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/dashboard/DashboardScreen.kt)**
+- **[ReminderListScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/reminders/ReminderListScreen.kt)**
+- **[ScheduleListScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/schedule/ScheduleListScreen.kt)**
+- **[TrackerListScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/tracker/TrackerListScreen.kt)**
+- **[NoteLogListScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/notes/NoteLogListScreen.kt)**
+- **[ChecklistListScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/checklist/ChecklistListScreen.kt)**
+
+---
+
+## Verification Plan
+
+To verify this implementation phase, execute compile and layout tests on an emulator or real device:
+
+1. **Gradle Build Verification**:
+   Ensure dependencies sync and clean build finishes without error.
+2. **Hilt Dependency Injection compilation check**:
+   Verify compile-time code generation completes correctly with no injector binding conflicts.
+3. **Database Schema check**:
+   A successful build will output SQLite schema configuration tables under `app/schemas`.
+4. **Navigation review**:
+   Boot up the application and confirm clicking bottom navigation icons changes display titles correctly.

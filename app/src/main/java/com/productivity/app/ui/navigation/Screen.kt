@@ -53,6 +53,23 @@ sealed class Screen(
         unselectedIcon = Icons.Outlined.Checklist
     )
 
+    /** Non-bottom-nav screens for reminder CRUD */
+    data object CreateReminder : Screen(
+        route = "reminders/create",
+        title = "New Reminder",
+        selectedIcon = Icons.Filled.AddAlert,
+        unselectedIcon = Icons.Outlined.AddAlert
+    )
+
+    data object ReminderDetail : Screen(
+        route = "reminders/{reminderId}",
+        title = "Reminder Detail",
+        selectedIcon = Icons.Filled.Notifications,
+        unselectedIcon = Icons.Outlined.Notifications
+    ) {
+        fun createRoute(reminderId: Long) = "reminders/$reminderId"
+    }
+
     companion object {
         /** Items displayed in the bottom navigation bar */
         val bottomNavItems = listOf(Dashboard, Reminders, Schedule, Trackers, Notes)

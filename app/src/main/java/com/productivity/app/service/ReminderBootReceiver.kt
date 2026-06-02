@@ -4,19 +4,58 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.productivity.app.data.db.AppDatabase
+import kotlinx.coroutines.*
 
 /**
  * Re-schedules all pending reminders after device reboot or app update.
- * Full implementation will be added in Phase 1B.
+ * Queries Room for all non-completed, future reminders and re-registers
+ * them with [AlarmManagerHelper] (or [WorkManagerHelper] for distant ones).
  */
 class ReminderBootReceiver : BroadcastReceiver() {
 
+    companion object {
+        private const val TAG = "BootReceiver"
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
-            intent.action == Intent.ACTION_MY_PACKAGE_REPLACED
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
+            intent.action != Intent.ACTION_MY_PACKAGE_REPLACED
         ) {
-            Log.d("BootReceiver", "Device rebooted or app updated — rescheduling alarms")
-            // TODO Phase 1B: Query all pending reminders from Room and re-register AlarmManager alarms
+            return
+        }
+
+        Log.d(TAG, "Device rebooted or app updated — rescheduling all pending alarms")
+
+        val pendingResult = goAsync()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val db = AppDatabase.getInstanceForWorker(context)
+                val now = System.currentTimeMillis()
+                val pendingReminders = db.reminderDao().getPendingReminders(now)
+
+                if (pendingReminders.isEmpty()) {
+                    Log.d(TAG, "No pending reminders to reschedule")
+                    return@launch
+                }
+
+                val alarmHelper = AlarmManagerHelper(context)
+                val workHelper = WorkManagerHelper(context)
+
+                var scheduledCount = 0
+                for (reminder in pendingReminders) {
+                    val triggerAt = reminder.snoozeUntil ?: reminder.datetime
+                    workHelper.scheduleReminder(alarmHelper, reminder.id, triggerAt)
+                    scheduledCount++
+                }
+
+                Log.d(TAG, "Rescheduled $scheduledCount pending reminders after boot")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error rescheduling reminders after boot", e)
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 }
