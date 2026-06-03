@@ -70,6 +70,40 @@ sealed class Screen(
         fun createRoute(reminderId: Long) = "reminders/$reminderId"
     }
 
+    /** Non-bottom-nav screens for schedule CRUD */
+    data object CreateEvent : Screen(
+        route = "schedule/create",
+        title = "New Event",
+        selectedIcon = Icons.Filled.CalendarMonth,
+        unselectedIcon = Icons.Outlined.CalendarMonth
+    )
+
+    data object EventDetail : Screen(
+        route = "schedule/{eventId}",
+        title = "Event Detail",
+        selectedIcon = Icons.Filled.CalendarMonth,
+        unselectedIcon = Icons.Outlined.CalendarMonth
+    ) {
+        fun createRoute(eventId: Long) = "schedule/$eventId"
+    }
+
+    /** Non-bottom-nav screens for tracker CRUD */
+    data object CreateTracker : Screen(
+        route = "trackers/create",
+        title = "New Tracker",
+        selectedIcon = Icons.Filled.TrendingUp,
+        unselectedIcon = Icons.Outlined.TrendingUp
+    )
+
+    data object TrackerDetail : Screen(
+        route = "trackers/{trackerId}",
+        title = "Tracker Detail",
+        selectedIcon = Icons.Filled.TrendingUp,
+        unselectedIcon = Icons.Outlined.TrendingUp
+    ) {
+        fun createRoute(trackerId: Long) = "trackers/$trackerId"
+    }
+
     companion object {
         /** Items displayed in the bottom navigation bar */
         val bottomNavItems = listOf(Dashboard, Reminders, Schedule, Trackers, Notes)

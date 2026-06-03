@@ -101,28 +101,28 @@
 > **Goal:** User can manage a calendar and track both courses and projects.
 
 ### Schedule Management UI
-- [ ] `ScheduleListScreen.kt` — daily agenda + upcoming events list
-- [ ] `CreateEventScreen.kt` — create events with type, date, time, location
-- [ ] `ScheduleViewModel.kt` — exposes today's and upcoming events as StateFlow
+- [x] `ScheduleListScreen.kt` — daily agenda + upcoming events list
+- [x] `CreateEventScreen.kt` — create events with type, date, time, location
+- [x] `ScheduleViewModel.kt` — exposes today's and upcoming events as StateFlow
 
 ### Schedule Domain (Use Cases)
-- [ ] `CreateScheduleEventUseCase.kt`
-- [ ] `UpdateScheduleEventUseCase.kt`
-- [ ] `DeleteScheduleEventUseCase.kt`
-- [ ] `GetDailyAgendaUseCase.kt`
+- [x] `CreateScheduleEventUseCase.kt`
+- [x] `UpdateScheduleEventUseCase.kt`
+- [x] `DeleteScheduleEventUseCase.kt`
+- [x] `GetDailyAgendaUseCase.kt`
 
 ### Progress Tracker UI
-- [ ] `TrackerListScreen.kt` — unified list of active courses and projects
-- [ ] `CreateTrackerScreen.kt` — create course or project tracker
-- [ ] `TrackerDetailScreen.kt` — view modules/milestones with progress bar
-- [ ] `AddProgressUnitScreen.kt` — add module (course) or milestone (project)
-- [ ] `TrackerViewModel.kt` — exposes trackers + completion percentage as StateFlow
+- [x] `TrackerListScreen.kt` — unified list of active courses and projects
+- [x] `CreateTrackerScreen.kt` — create course or project tracker
+- [x] `TrackerDetailScreen.kt` — view modules/milestones with progress bar (including inline progress unit addition per user request)
+- [x] `AddProgressUnitScreen.kt` (implemented inline in `TrackerDetailScreen.kt`)
+- [x] `TrackerViewModel.kt` — exposes trackers + completion percentage as StateFlow
 
 ### Progress Tracker Domain (Use Cases)
-- [ ] `CreateTrackerUseCase.kt`
-- [ ] `AddProgressUnitUseCase.kt`
-- [ ] `CompleteProgressUnitUseCase.kt` (updates `completed_units` + `current_unit_label`)
-- [ ] `DeleteTrackerUseCase.kt`
+- [x] `CreateTrackerUseCase.kt`
+- [x] `AddProgressUnitUseCase.kt`
+- [x] `CompleteProgressUnitUseCase.kt` (updates `completed_units` + `current_unit_label`)
+- [x] `DeleteTrackerUseCase.kt`
 
 ---
 

@@ -12,7 +12,11 @@ import com.productivity.app.ui.notes.NoteLogListScreen
 import com.productivity.app.ui.reminders.CreateReminderScreen
 import com.productivity.app.ui.reminders.ReminderDetailScreen
 import com.productivity.app.ui.reminders.ReminderListScreen
+import com.productivity.app.ui.schedule.CreateEventScreen
+import com.productivity.app.ui.schedule.EventDetailScreen
 import com.productivity.app.ui.schedule.ScheduleListScreen
+import com.productivity.app.ui.tracker.CreateTrackerScreen
+import com.productivity.app.ui.tracker.TrackerDetailScreen
 import com.productivity.app.ui.tracker.TrackerListScreen
 
 @Composable
@@ -21,9 +25,12 @@ fun NavGraph(navController: NavHostController) {
         navController = navController,
         startDestination = Screen.Dashboard.route
     ) {
+        // ── Dashboard ────────────────────────────────────────
         composable(Screen.Dashboard.route) {
             DashboardScreen()
         }
+
+        // ── Reminders ────────────────────────────────────────
         composable(Screen.Reminders.route) {
             ReminderListScreen(
                 onNavigateToCreate = {
@@ -51,12 +58,66 @@ fun NavGraph(navController: NavHostController) {
                 onNavigateBack = { navController.popBackStack() }
             )
         }
+
+        // ── Schedule ─────────────────────────────────────────
         composable(Screen.Schedule.route) {
-            ScheduleListScreen()
+            ScheduleListScreen(
+                onNavigateToCreate = {
+                    navController.navigate(Screen.CreateEvent.route)
+                },
+                onNavigateToDetail = { eventId ->
+                    navController.navigate(Screen.EventDetail.createRoute(eventId))
+                }
+            )
         }
+        composable(Screen.CreateEvent.route) {
+            CreateEventScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = Screen.EventDetail.route,
+            arguments = listOf(
+                navArgument("eventId") { type = NavType.LongType }
+            )
+        ) { backStackEntry ->
+            val eventId = backStackEntry.arguments?.getLong("eventId") ?: return@composable
+            EventDetailScreen(
+                eventId = eventId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // ── Trackers ─────────────────────────────────────────
         composable(Screen.Trackers.route) {
-            TrackerListScreen()
+            TrackerListScreen(
+                onNavigateToCreate = {
+                    navController.navigate(Screen.CreateTracker.route)
+                },
+                onNavigateToDetail = { trackerId ->
+                    navController.navigate(Screen.TrackerDetail.createRoute(trackerId))
+                }
+            )
         }
+        composable(Screen.CreateTracker.route) {
+            CreateTrackerScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = Screen.TrackerDetail.route,
+            arguments = listOf(
+                navArgument("trackerId") { type = NavType.LongType }
+            )
+        ) { backStackEntry ->
+            val trackerId = backStackEntry.arguments?.getLong("trackerId") ?: return@composable
+            TrackerDetailScreen(
+                trackerId = trackerId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // ── Notes & Checklists (still placeholders) ──────────
         composable(Screen.Notes.route) {
             NoteLogListScreen()
         }
