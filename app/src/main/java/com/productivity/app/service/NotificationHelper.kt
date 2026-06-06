@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -18,6 +19,7 @@ import com.productivity.app.data.model.Reminder
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import android.media.RingtoneManager
 
 /**
  * Creates typed notification channels on app startup and builds
@@ -31,12 +33,12 @@ class NotificationHelper @Inject constructor(
     companion object {
         private const val TAG = "NotificationHelper"
 
-        // Channel IDs — one per reminder type
-        const val CHANNEL_MEDICINE = "channel_medicine"
-        const val CHANNEL_MEETING = "channel_meeting"
-        const val CHANNEL_DEADLINE = "channel_deadline"
-        const val CHANNEL_TRAVEL = "channel_travel"
-        const val CHANNEL_GENERAL = "channel_general"
+        // Channel IDs — one per reminder type (v2 to force OS recreation with sound settings)
+        const val CHANNEL_MEDICINE = "channel_medicine_v2"
+        const val CHANNEL_MEETING = "channel_meeting_v2"
+        const val CHANNEL_DEADLINE = "channel_deadline_v2"
+        const val CHANNEL_TRAVEL = "channel_travel_v2"
+        const val CHANNEL_GENERAL = "channel_general_v2"
 
         // Snooze duration options (milliseconds)
         val SNOOZE_OPTIONS_MINUTES = listOf(5, 10, 15, 30)
@@ -57,40 +59,61 @@ class NotificationHelper @Inject constructor(
     private fun createNotificationChannels() {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+
         val channels = listOf(
             NotificationChannel(
                 CHANNEL_MEDICINE,
                 "Medicine Reminders",
                 NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = "Alerts for medication reminders" },
+            ).apply {
+                description = "Alerts for medication reminders"
+                setSound(null, null)  // Sound managed by AlarmRingService
+                enableVibration(false)
+            },
 
             NotificationChannel(
                 CHANNEL_MEETING,
                 "Meeting Reminders",
                 NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = "Alerts for upcoming meetings" },
+            ).apply {
+                description = "Alerts for upcoming meetings"
+                setSound(null, null)
+                enableVibration(false)
+            },
 
             NotificationChannel(
                 CHANNEL_DEADLINE,
                 "Deadline Reminders",
                 NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = "Alerts for approaching deadlines" },
+            ).apply {
+                description = "Alerts for approaching deadlines"
+                setSound(null, null)
+                enableVibration(false)
+            },
 
             NotificationChannel(
                 CHANNEL_TRAVEL,
                 "Travel Reminders",
                 NotificationManager.IMPORTANCE_DEFAULT
-            ).apply { description = "Alerts for travel plans" },
+            ).apply {
+                description = "Alerts for travel plans"
+                setSound(null, null)
+                enableVibration(false)
+            },
 
             NotificationChannel(
                 CHANNEL_GENERAL,
                 "General Reminders",
                 NotificationManager.IMPORTANCE_DEFAULT
-            ).apply { description = "General purpose reminders" }
+            ).apply {
+                description = "General purpose reminders"
+                setSound(null, null)
+                enableVibration(false)
+            }
         )
 
         manager.createNotificationChannels(channels)
-        Log.d(TAG, "Notification channels created")
+        Log.d(TAG, "Notification channels created (sound disabled — managed by AlarmRingService)")
     }
 
     /**
@@ -164,6 +187,7 @@ class NotificationHelper @Inject constructor(
             else -> ""
         }
 
+        val isHighPriority = channelId in listOf(CHANNEL_MEDICINE, CHANNEL_MEETING, CHANNEL_DEADLINE)
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(reminder.title)
@@ -176,10 +200,18 @@ class NotificationHelper @Inject constructor(
                 }
             )
             .setPriority(
-                if (channelId in listOf(CHANNEL_MEDICINE, CHANNEL_MEETING, CHANNEL_DEADLINE))
+                if (isHighPriority)
                     NotificationCompat.PRIORITY_HIGH
                 else
                     NotificationCompat.PRIORITY_DEFAULT
+            )
+            .setSound(
+                if (isHighPriority) RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                else RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            )
+            .setVibrate(
+                if (isHighPriority) longArrayOf(0, 500, 250, 500, 250, 500)
+                else null
             )
             .setContentIntent(contentPendingIntent)
             .setAutoCancel(true)
@@ -190,6 +222,7 @@ class NotificationHelper @Inject constructor(
             }
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setSilent(true)  // Sound is played by AlarmRingService, not the notification
             .build()
 
         // Check notification permission on Android 13+

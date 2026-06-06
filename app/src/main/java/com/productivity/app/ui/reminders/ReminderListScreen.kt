@@ -34,7 +34,8 @@ import java.util.*
 fun ReminderListScreen(
     viewModel: ReminderViewModel = hiltViewModel(),
     onNavigateToCreate: () -> Unit = {},
-    onNavigateToDetail: (Long) -> Unit = {}
+    onNavigateToDetail: (Long) -> Unit = {},
+    onNavigateToSettings: () -> Unit = {}
 ) {
     val reminders by viewModel.activeReminders.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
@@ -76,14 +77,28 @@ fun ReminderListScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Header
-            Text(
-                text = "Reminders",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp)
-            )
+            // Header with settings icon
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 8.dp, top = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Reminders",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onNavigateToSettings) {
+                    Icon(
+                        imageVector = Icons.Outlined.Settings,
+                        contentDescription = "Alarm Settings",
+                        tint = TextSecondary
+                    )
+                }
+            }
             Text(
                 text = "${reminders.size} active",
                 style = MaterialTheme.typography.bodyMedium,

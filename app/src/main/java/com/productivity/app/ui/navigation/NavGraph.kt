@@ -15,6 +15,7 @@ import com.productivity.app.ui.reminders.ReminderListScreen
 import com.productivity.app.ui.schedule.CreateEventScreen
 import com.productivity.app.ui.schedule.EventDetailScreen
 import com.productivity.app.ui.schedule.ScheduleListScreen
+import com.productivity.app.ui.settings.AlarmSettingsScreen
 import com.productivity.app.ui.tracker.CreateTrackerScreen
 import com.productivity.app.ui.tracker.TrackerDetailScreen
 import com.productivity.app.ui.tracker.TrackerListScreen
@@ -38,6 +39,9 @@ fun NavGraph(navController: NavHostController) {
                 },
                 onNavigateToDetail = { reminderId ->
                     navController.navigate(Screen.ReminderDetail.createRoute(reminderId))
+                },
+                onNavigateToSettings = {
+                    navController.navigate(Screen.AlarmSettings.route)
                 }
             )
         }
@@ -55,6 +59,13 @@ fun NavGraph(navController: NavHostController) {
             val reminderId = backStackEntry.arguments?.getLong("reminderId") ?: return@composable
             ReminderDetailScreen(
                 reminderId = reminderId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // ── Alarm Settings ───────────────────────────────────
+        composable(Screen.AlarmSettings.route) {
+            AlarmSettingsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

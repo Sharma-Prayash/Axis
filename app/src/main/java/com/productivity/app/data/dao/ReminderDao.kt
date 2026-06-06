@@ -22,7 +22,7 @@ interface ReminderDao {
     @Query("SELECT * FROM reminder WHERE id = :id")
     suspend fun getReminderById(id: Long): Reminder?
 
-    @Query("SELECT * FROM reminder WHERE is_completed = 0 AND datetime > :now ORDER BY datetime ASC")
+    @Query("SELECT * FROM reminder WHERE is_completed = 0 AND (datetime > :now OR (is_snoozed = 1 AND snooze_until > :now)) ORDER BY datetime ASC")
     suspend fun getPendingReminders(now: Long): List<Reminder>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

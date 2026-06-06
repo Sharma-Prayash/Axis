@@ -30,6 +30,9 @@ class DoneReceiver : BroadcastReceiver() {
         // Dismiss the current notification
         NotificationHelper(context).cancelNotification(reminderId)
 
+        // Stop the alarm ring service (stops sound and vibration)
+        context.stopService(Intent(context, AlarmRingService::class.java))
+
         val pendingResult = goAsync()
 
         CoroutineScope(Dispatchers.IO).launch {

@@ -4,12 +4,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.productivity.app.data.db.AppDatabase
 import kotlinx.coroutines.*
 
 /**
  * Triggered by [AlarmManager] when a scheduled alarm fires.
- * Queries the reminder from Room and posts a notification via [NotificationHelper].
+ * Starts [AlarmRingService] which handles sound playback and notification.
  */
 class AlarmReceiver : BroadcastReceiver() {
 
@@ -35,19 +36,21 @@ class AlarmReceiver : BroadcastReceiver() {
                 val reminder = db.reminderDao().getReminderById(reminderId)
 
                 if (reminder == null) {
-                    Log.w(TAG, "Reminder $reminderId not found in database — skipping notification")
+                    Log.w(TAG, "Reminder $reminderId not found in database — skipping")
                     return@launch
                 }
 
                 if (reminder.isCompleted) {
-                    Log.d(TAG, "Reminder $reminderId is already completed — skipping notification")
+                    Log.d(TAG, "Reminder $reminderId is already completed — skipping")
                     return@launch
                 }
 
-                // Post the notification
-                val notificationHelper = NotificationHelper(context)
-                notificationHelper.showReminderNotification(reminder)
-                Log.d(TAG, "Notification posted for reminder $reminderId")
+                // Start the alarm ring foreground service
+                val serviceIntent = Intent(context, AlarmRingService::class.java).apply {
+                    putExtra(AlarmRingService.EXTRA_REMINDER_ID, reminder.id)
+                }
+                ContextCompat.startForegroundService(context, serviceIntent)
+                Log.d(TAG, "AlarmRingService started for reminder $reminderId")
             } catch (e: Exception) {
                 Log.e(TAG, "Error handling alarm for reminder $reminderId", e)
             } finally {

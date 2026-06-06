@@ -1,0 +1,177 @@
+# Phase 1C — Schedule & Progress Tracker Implementation Plan
+
+Phase 1A/1B delivered the foundation and reminder engine. Phase 1C now builds the **Schedule Management** and **Progress Tracker** features — daily agenda, event CRUD, course/project tracking with unit-level progress.
+
+> [!NOTE]
+> All new files follow established patterns: `@Inject`-based use cases, `@HiltViewModel` ViewModels with `StateFlow` + `SharedFlow<UiEvent>`, and dark-themed Compose screens using the existing `Color.kt` palette. No new Gradle dependencies are needed.
+
+---
+
+## Proposed Changes
+
+### Schedule Domain — Use Cases
+
+New package: `com.productivity.app.domain.schedule`
+
+#### [NEW] [CreateScheduleEventUseCase.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/domain/schedule/CreateScheduleEventUseCase.kt)
+- Validates that `startDatetime < endDatetime` (unless `isAllDay`)
+- Inserts event via `ScheduleRepository.insert()`
+- Returns the created event ID
+
+#### [NEW] [UpdateScheduleEventUseCase.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/domain/schedule/UpdateScheduleEventUseCase.kt)
+- Validates the updated fields
+- Calls `ScheduleRepository.update()`
+
+#### [NEW] [DeleteScheduleEventUseCase.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/domain/schedule/DeleteScheduleEventUseCase.kt)
+- Deletes event by ID via `ScheduleRepository.deleteById()`
+
+#### [NEW] [GetDailyAgendaUseCase.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/domain/schedule/GetDailyAgendaUseCase.kt)
+- Computes `startOfDay` / `endOfDay` from a given `Calendar` date
+- Returns `Flow<List<ScheduleEvent>>` for that day via `ScheduleRepository.getEventsForDay()`
+
+---
+
+### Schedule UI — ViewModel & Screens
+
+#### [NEW] [ScheduleViewModel.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/schedule/ScheduleViewModel.kt)
+`@HiltViewModel` exposing:
+- `selectedDate: StateFlow<Long>` — currently viewed date (default: today)
+- `todaysEvents: StateFlow<List<ScheduleEvent>>` — events for `selectedDate`
+- `upcomingEvents: StateFlow<List<ScheduleEvent>>` — next 7 days from today
+- `selectedEvent: StateFlow<ScheduleEvent?>` — for detail/edit view
+- Functions: `setDate(dateMillis)`, `createEvent(...)`, `updateEvent(...)`, `deleteEvent(id)`, `loadEvent(id)`
+- `uiEvent: SharedFlow<ScheduleUiEvent>` — one-shot events (Created, Updated, Deleted, Error)
+
+#### [MODIFY] [ScheduleListScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/schedule/ScheduleListScreen.kt)
+Replace the current placeholder with a full implementation:
+- **Date selector row** at the top — horizontal scrollable list of days (today ± 7 days), tappable to switch
+- **Today's Agenda** section — `LazyColumn` of `EventCard` composables, each showing: type icon (color-coded), title, time range, location (if present)
+- **Upcoming Events** section — next 7 days grouped by date
+- Empty state when no events exist
+- FAB to navigate to `CreateEventScreen`
+
+#### [NEW] [CreateEventScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/schedule/CreateEventScreen.kt)
+Form for creating events:
+- Title text field
+- Type selector (chip group: Event, Meeting, Appointment, Deadline)
+- Date picker + Start time picker + End time picker
+- All-day toggle
+- Location text field (optional)
+- Notes text field (optional)
+- "Create Event" button → calls `viewModel.createEvent()`
+- TopAppBar with back navigation
+
+#### [NEW] [EventDetailScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/schedule/EventDetailScreen.kt)
+View an individual event:
+- Structured info card showing: type badge, title, date, time range, location, notes
+- Action buttons: Edit (future), Delete (with confirmation dialog)
+- TopAppBar with back navigation
+
+---
+
+### Tracker Domain — Use Cases
+
+New package: `com.productivity.app.domain.tracker`
+
+#### [NEW] [CreateTrackerUseCase.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/domain/tracker/CreateTrackerUseCase.kt)
+- Inserts tracker via `TrackerRepository.insertTracker()`
+- Returns the created tracker ID
+
+#### [NEW] [AddProgressUnitUseCase.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/domain/tracker/AddProgressUnitUseCase.kt)
+- Inserts a new `ProgressUnit` for a given tracker ID
+- Auto-increments `totalUnits` on the parent tracker via `TrackerRepository.updateTracker()`
+
+#### [NEW] [CompleteProgressUnitUseCase.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/domain/tracker/CompleteProgressUnitUseCase.kt)
+- Marks a unit as completed (`isCompleted = true`, `completedAt = now`)
+- Increments `completedUnits` on the parent tracker
+- Updates `currentUnitLabel` to the next incomplete unit's title (or null if all done)
+- If all units done, sets `completedAt` on the tracker
+
+#### [NEW] [DeleteTrackerUseCase.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/domain/tracker/DeleteTrackerUseCase.kt)
+- Deletes tracker by ID via `TrackerRepository.deleteTrackerById()`
+- Units cascade-delete via the Room `ForeignKey.CASCADE` already set on `ProgressUnit`
+
+---
+
+### Tracker UI — ViewModel & Screens
+
+#### [NEW] [TrackerViewModel.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/tracker/TrackerViewModel.kt)
+`@HiltViewModel` exposing:
+- `activeTrackers: StateFlow<List<ProgressTracker>>` — active (non-completed) trackers
+- `selectedTracker: StateFlow<ProgressTracker?>` — for detail screen
+- `selectedTrackerUnits: StateFlow<List<ProgressUnit>>` — units for the selected tracker
+- Functions: `createTracker(...)`, `deleteTracker(id)`, `loadTracker(id)`, `addUnit(...)`, `completeUnit(unitId)`, `clearSelection()`
+- `uiEvent: SharedFlow<TrackerUiEvent>` — one-shot events (Created, Deleted, UnitAdded, UnitCompleted, TrackerCompleted, Error)
+
+#### [MODIFY] [TrackerListScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/tracker/TrackerListScreen.kt)
+Replace the current placeholder with a full implementation:
+- `LazyColumn` of `TrackerCard` composables, each showing: type badge (Course / Project), title, description, animated progress bar (`completedUnits / totalUnits`), current unit label, completion percentage
+- Filter chips: All / Courses / Projects
+- FAB to navigate to `CreateTrackerScreen`
+- Empty state when no trackers exist
+
+#### [NEW] [CreateTrackerScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/tracker/CreateTrackerScreen.kt)
+Form for creating trackers:
+- Title text field
+- Type selector (chip group: Course, Project)
+- Description text field (optional)
+- "Create Tracker" button → calls `viewModel.createTracker()`
+- TopAppBar with back navigation
+
+#### [NEW] [TrackerDetailScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/tracker/TrackerDetailScreen.kt)
+View and manage an individual tracker:
+- Header: type badge, title, description, overall progress bar with percentage
+- Unit list: `LazyColumn` of `ProgressUnitItem` composables — each showing title, order index, checkbox to mark complete, completed timestamp if done
+- "Add Unit" button at the bottom → expands an inline text field to add a new module/milestone
+- Delete button with confirmation dialog
+- TopAppBar with back navigation
+
+#### [NEW] [AddProgressUnitScreen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/tracker/AddProgressUnitScreen.kt)
+Dedicated screen for adding multiple units at once (batch add):
+- Title text field
+- Optional notes text field
+- "Add Unit" button → calls `viewModel.addUnit()`
+- Inline list of recently added units
+- TopAppBar with back navigation
+
+---
+
+### Navigation Updates
+
+#### [MODIFY] [Screen.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/navigation/Screen.kt)
+Add new route entries:
+- `CreateEvent` (route: `"schedule/create"`)
+- `EventDetail` (route: `"schedule/{eventId}"`, with `eventId` as `Long` arg)
+- `CreateTracker` (route: `"trackers/create"`)
+- `TrackerDetail` (route: `"trackers/{trackerId}"`, with `trackerId` as `Long` arg)
+- `AddProgressUnit` (route: `"trackers/{trackerId}/add-unit"`, with `trackerId` as `Long` arg)
+
+#### [MODIFY] [NavGraph.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/navigation/NavGraph.kt)
+Register the 5 new composable destinations with argument parsing.
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> **Event Detail — edit mode**: The task list mentions `EventDetailScreen` for "view + edit". Should I implement inline editing on the detail screen (toggle to edit mode), or keep it view-only with a separate edit screen? For Phase 1C I plan **view-only with delete**, and add editing in Phase 1E polish. Okay?
+
+> [!IMPORTANT]
+> **AddProgressUnitScreen vs inline add**: The task list has a dedicated `AddProgressUnitScreen`. I could instead do it as an inline expandable section on `TrackerDetailScreen` (simpler, fewer navigations). Would you prefer the dedicated screen or inline approach? I plan to implement **both** — inline quick-add on the detail screen + a dedicated batch-add screen.
+
+---
+
+## Verification Plan
+
+### Automated/Local Tests
+- Verify the project compiles with all new files via Android Studio build
+
+### Manual Verification (Real Device)
+- Create a schedule event → verify it appears in the daily agenda
+- Switch dates → verify the date selector correctly filters events
+- Delete an event → verify removal from list
+- Create a course tracker with 3 modules → verify progress bar shows 0%
+- Complete 1 module → verify progress bar updates to ~33%, `currentUnitLabel` changes
+- Complete all modules → verify tracker shows 100% and `completedAt` is set
+- Create a project tracker → verify it shows under "Projects" filter
+- Navigate: List → Create → Detail → back, verify smooth transitions

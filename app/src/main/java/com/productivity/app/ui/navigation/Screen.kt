@@ -104,6 +104,14 @@ sealed class Screen(
         fun createRoute(trackerId: Long) = "trackers/$trackerId"
     }
 
+    /** Alarm settings screen — accessed from Reminders top bar */
+    data object AlarmSettings : Screen(
+        route = "alarm_settings",
+        title = "Alarm Settings",
+        selectedIcon = Icons.Filled.Settings,
+        unselectedIcon = Icons.Outlined.Settings
+    )
+
     companion object {
         /** Items displayed in the bottom navigation bar */
         val bottomNavItems = listOf(Dashboard, Reminders, Schedule, Trackers, Notes)
