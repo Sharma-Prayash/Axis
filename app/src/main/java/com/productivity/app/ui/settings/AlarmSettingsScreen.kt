@@ -32,6 +32,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.productivity.app.data.preferences.AlarmPreferences
 import com.productivity.app.ui.theme.*
 import kotlinx.coroutines.delay
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +45,19 @@ fun AlarmSettingsScreen(
     val ringDuration by viewModel.ringDuration.collectAsStateWithLifecycle()
     val alarmToneUri by viewModel.alarmToneUri.collectAsStateWithLifecycle()
     val vibrationEnabled by viewModel.vibrationEnabled.collectAsStateWithLifecycle()
+
+    val workspaceDomain by viewModel.workspaceDomain.collectAsStateWithLifecycle()
+    val journalTemplateId by viewModel.journalTemplateId.collectAsStateWithLifecycle()
+    val learningTemplateId by viewModel.learningTemplateId.collectAsStateWithLifecycle()
+    val researchTemplateId by viewModel.researchTemplateId.collectAsStateWithLifecycle()
+    val meetingTemplateId by viewModel.meetingTemplateId.collectAsStateWithLifecycle()
+
+    val apiToken by viewModel.apiToken.collectAsStateWithLifecycle()
+    val notionDatabaseId by viewModel.notionDatabaseId.collectAsStateWithLifecycle()
+    val titlePropertyName by viewModel.titlePropertyName.collectAsStateWithLifecycle()
+    val notionTargetType by viewModel.notionTargetType.collectAsStateWithLifecycle()
+
+    val suffixLabel = if (notionTargetType.lowercase() == "page") "Parent Page ID" else "Database ID"
 
     var showDurationPicker by remember { mutableStateOf(false) }
     var isPreviewPlaying by remember { mutableStateOf(false) }
@@ -271,6 +287,276 @@ fun AlarmSettingsScreen(
                             uncheckedTrackColor = DarkSurfaceVariant
                         )
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── Section: Notion Integration ────────────────────────
+            SectionHeader(title = "Notion Integration", icon = Icons.Outlined.CloudQueue)
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Notion Domain & Templates",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Workspace Domain
+                    OutlinedTextField(
+                        value = workspaceDomain,
+                        onValueChange = { viewModel.updateWorkspaceDomain(it) },
+                        label = { Text("Workspace Domain") },
+                        placeholder = { Text("e.g. personal-manager") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPrimary,
+                            unfocusedBorderColor = DarkSurfaceVariant,
+                            focusedLabelColor = AccentPrimary,
+                            unfocusedLabelColor = TextTertiary,
+                            cursorColor = AccentPrimary,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Journal Template ID
+                    OutlinedTextField(
+                        value = journalTemplateId,
+                        onValueChange = { viewModel.updateJournalTemplateId(it) },
+                        label = { Text("Journal Page/Template ID") },
+                        placeholder = { Text("e.g. 1a2b3c...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPrimary,
+                            unfocusedBorderColor = DarkSurfaceVariant,
+                            focusedLabelColor = AccentPrimary,
+                            unfocusedLabelColor = TextTertiary,
+                            cursorColor = AccentPrimary,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Learning Template ID
+                    OutlinedTextField(
+                        value = learningTemplateId,
+                        onValueChange = { viewModel.updateLearningTemplateId(it) },
+                        label = { Text("Learning Page/Template ID") },
+                        placeholder = { Text("e.g. 1a2b3c...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPrimary,
+                            unfocusedBorderColor = DarkSurfaceVariant,
+                            focusedLabelColor = AccentPrimary,
+                            unfocusedLabelColor = TextTertiary,
+                            cursorColor = AccentPrimary,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Research Template ID
+                    OutlinedTextField(
+                        value = researchTemplateId,
+                        onValueChange = { viewModel.updateResearchTemplateId(it) },
+                        label = { Text("Research Page/Template ID") },
+                        placeholder = { Text("e.g. 1a2b3c...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPrimary,
+                            unfocusedBorderColor = DarkSurfaceVariant,
+                            focusedLabelColor = AccentPrimary,
+                            unfocusedLabelColor = TextTertiary,
+                            cursorColor = AccentPrimary,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Meeting Template ID
+                    OutlinedTextField(
+                        value = meetingTemplateId,
+                        onValueChange = { viewModel.updateMeetingTemplateId(it) },
+                        label = { Text("Meeting Page/Template ID") },
+                        placeholder = { Text("e.g. 1a2b3c...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPrimary,
+                            unfocusedBorderColor = DarkSurfaceVariant,
+                            focusedLabelColor = AccentPrimary,
+                            unfocusedLabelColor = TextTertiary,
+                            cursorColor = AccentPrimary,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Notion REST API Setup",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Notion Storage Target Type Selector
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Save Target:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        
+                        listOf("database", "page").forEach { typeOption ->
+                            val isSelected = notionTargetType.lowercase() == typeOption
+                            val selectedColor = AccentPrimary
+                            FilterChip(
+                                onClick = { viewModel.updateNotionTargetType(typeOption) },
+                                selected = isSelected,
+                                label = {
+                                    Text(
+                                        text = typeOption.replaceFirstChar { it.uppercase() },
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = selectedColor.copy(alpha = 0.2f),
+                                    selectedLabelColor = selectedColor,
+                                    containerColor = DarkSurfaceVariant,
+                                    labelColor = TextSecondary
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    borderColor = Color.Transparent,
+                                    selectedBorderColor = selectedColor.copy(alpha = 0.5f),
+                                    enabled = true,
+                                    selected = isSelected
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    var showToken by remember { mutableStateOf(false) }
+
+                    // Notion API Token
+                    OutlinedTextField(
+                        value = apiToken,
+                        onValueChange = { viewModel.updateApiToken(it) },
+                        label = { Text("Notion API Token") },
+                        placeholder = { Text("secret_...") },
+                        singleLine = true,
+                        visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showToken = !showToken }) {
+                                Icon(
+                                    imageVector = if (showToken) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    contentDescription = if (showToken) "Hide token" else "Show token",
+                                    tint = TextTertiary
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPrimary,
+                            unfocusedBorderColor = DarkSurfaceVariant,
+                            focusedLabelColor = AccentPrimary,
+                            unfocusedLabelColor = TextTertiary,
+                            cursorColor = AccentPrimary,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Notion Target ID (Database ID or Parent Page ID)
+                    OutlinedTextField(
+                        value = notionDatabaseId,
+                        onValueChange = { viewModel.updateNotionDatabaseId(it) },
+                        label = { Text(suffixLabel) },
+                        placeholder = { Text(if (notionTargetType.lowercase() == "page") "e.g. 1a2b3c... (Parent Page ID)" else "e.g. 1a2b3c... (Database ID)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPrimary,
+                            unfocusedBorderColor = DarkSurfaceVariant,
+                            focusedLabelColor = AccentPrimary,
+                            unfocusedLabelColor = TextTertiary,
+                            cursorColor = AccentPrimary,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    if (notionTargetType.lowercase() != "page") {
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Title Property Name
+                        OutlinedTextField(
+                            value = titlePropertyName,
+                            onValueChange = { viewModel.updateTitlePropertyName(it) },
+                            label = { Text("Notion Title Property Name") },
+                            placeholder = { Text("Default: Name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = AccentPrimary,
+                                unfocusedBorderColor = DarkSurfaceVariant,
+                                focusedLabelColor = AccentPrimary,
+                                unfocusedLabelColor = TextTertiary,
+                                cursorColor = AccentPrimary,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
                 }
             }
 

@@ -7,8 +7,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.productivity.app.ui.checklist.ChecklistListScreen
+import com.productivity.app.ui.checklist.CreateChecklistScreen
+import com.productivity.app.ui.checklist.ChecklistDetailScreen
 import com.productivity.app.ui.dashboard.DashboardScreen
 import com.productivity.app.ui.notes.NoteLogListScreen
+import com.productivity.app.ui.notes.CreateNoteLogScreen
 import com.productivity.app.ui.reminders.CreateReminderScreen
 import com.productivity.app.ui.reminders.ReminderDetailScreen
 import com.productivity.app.ui.reminders.ReminderListScreen
@@ -128,12 +131,45 @@ fun NavGraph(navController: NavHostController) {
             )
         }
 
-        // ── Notes & Checklists (still placeholders) ──────────
+        // ── Notes & Checklists ───────────────────────────────
         composable(Screen.Notes.route) {
-            NoteLogListScreen()
+            NoteLogListScreen(
+                onNavigateToCreate = {
+                    navController.navigate(Screen.CreateNoteLog.route)
+                }
+            )
+        }
+        composable(Screen.CreateNoteLog.route) {
+            CreateNoteLogScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
         composable(Screen.Checklists.route) {
-            ChecklistListScreen()
+            ChecklistListScreen(
+                onNavigateToCreate = {
+                    navController.navigate(Screen.CreateChecklist.route)
+                },
+                onNavigateToDetail = { checklistId ->
+                    navController.navigate(Screen.ChecklistDetail.createRoute(checklistId))
+                }
+            )
+        }
+        composable(Screen.CreateChecklist.route) {
+            CreateChecklistScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = Screen.ChecklistDetail.route,
+            arguments = listOf(
+                navArgument("checklistId") { type = NavType.LongType }
+            )
+        ) { backStackEntry ->
+            val checklistId = backStackEntry.arguments?.getLong("checklistId") ?: return@composable
+            ChecklistDetailScreen(
+                checklistId = checklistId,
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
     }
 }

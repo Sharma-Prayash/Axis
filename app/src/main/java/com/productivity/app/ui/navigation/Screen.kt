@@ -104,6 +104,31 @@ sealed class Screen(
         fun createRoute(trackerId: Long) = "trackers/$trackerId"
     }
 
+    /** Non-bottom-nav screens for checklist CRUD */
+    data object CreateChecklist : Screen(
+        route = "checklists/create",
+        title = "New Checklist",
+        selectedIcon = Icons.Filled.Checklist,
+        unselectedIcon = Icons.Outlined.Checklist
+    )
+
+    data object ChecklistDetail : Screen(
+        route = "checklists/{checklistId}",
+        title = "Checklist Detail",
+        selectedIcon = Icons.Filled.Checklist,
+        unselectedIcon = Icons.Outlined.Checklist
+    ) {
+        fun createRoute(checklistId: Long) = "checklists/$checklistId"
+    }
+
+    /** Non-bottom-nav screens for note logs CRUD */
+    data object CreateNoteLog : Screen(
+        route = "notes/create",
+        title = "New Note Log",
+        selectedIcon = Icons.Filled.Description,
+        unselectedIcon = Icons.Outlined.Description
+    )
+
     /** Alarm settings screen — accessed from Reminders top bar */
     data object AlarmSettings : Screen(
         route = "alarm_settings",
