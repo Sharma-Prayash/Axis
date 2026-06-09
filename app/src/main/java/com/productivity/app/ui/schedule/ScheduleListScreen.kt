@@ -41,6 +41,12 @@ fun ScheduleListScreen(
     val todaysEvents by viewModel.todaysEvents.collectAsStateWithLifecycle()
     val upcomingEvents by viewModel.upcomingEvents.collectAsStateWithLifecycle()
 
+    val filteredUpcomingEvents = remember(upcomingEvents, selectedDate) {
+        upcomingEvents.filter { event ->
+            !isSameDay(event.startDatetime, selectedDate)
+        }
+    }
+
     // Generate the day selector: today ± 7 days
     val days = remember {
         val calendar = Calendar.getInstance()
@@ -115,7 +121,7 @@ fun ScheduleListScreen(
                     EmptyAgendaCard()
                 }
             } else {
-                items(todaysEvents, key = { it.id }) { event ->
+                items(todaysEvents, key = { "today_${it.id}" }) { event ->
                     EventCard(
                         event = event,
                         onClick = { onNavigateToDetail(event.id) },
@@ -125,7 +131,7 @@ fun ScheduleListScreen(
             }
 
             // ── Upcoming Section ──────────────────────────────
-            if (upcomingEvents.isNotEmpty()) {
+            if (filteredUpcomingEvents.isNotEmpty()) {
                 item {
                     Spacer(modifier = Modifier.height(24.dp))
                     Text(
@@ -139,7 +145,7 @@ fun ScheduleListScreen(
                 }
 
                 // Group upcoming events by date
-                val grouped = upcomingEvents.groupBy { event ->
+                val grouped = filteredUpcomingEvents.groupBy { event ->
                     val cal = Calendar.getInstance().apply { timeInMillis = event.startDatetime }
                     cal.get(Calendar.YEAR) * 1000 + cal.get(Calendar.DAY_OF_YEAR)
                 }
@@ -154,7 +160,7 @@ fun ScheduleListScreen(
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
                         )
                     }
-                    items(eventsForDay, key = { it.id }) { event ->
+                    items(eventsForDay, key = { "upcoming_${it.id}" }) { event ->
                         EventCard(
                             event = event,
                             onClick = { onNavigateToDetail(event.id) },

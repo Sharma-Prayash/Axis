@@ -33,26 +33,40 @@ class ReminderBootReceiver : BroadcastReceiver() {
             try {
                 val db = AppDatabase.getInstanceForWorker(context)
                 val now = System.currentTimeMillis()
-                val pendingReminders = db.reminderDao().getPendingReminders(now)
-
-                if (pendingReminders.isEmpty()) {
-                    Log.d(TAG, "No pending reminders to reschedule")
-                    return@launch
-                }
-
                 val alarmHelper = AlarmManagerHelper(context)
-                val workHelper = WorkManagerHelper(context)
 
-                var scheduledCount = 0
-                for (reminder in pendingReminders) {
-                    val triggerAt = reminder.snoozeUntil ?: reminder.datetime
-                    workHelper.scheduleReminder(alarmHelper, reminder.id, triggerAt)
-                    scheduledCount++
+                // 1. Reschedule pending reminders
+                val pendingReminders = db.reminderDao().getPendingReminders(now)
+                if (pendingReminders.isNotEmpty()) {
+                    val workHelper = WorkManagerHelper(context)
+                    var scheduledCount = 0
+                    for (reminder in pendingReminders) {
+                        val triggerAt = reminder.snoozeUntil ?: reminder.datetime
+                        workHelper.scheduleReminder(alarmHelper, reminder.id, triggerAt)
+                        scheduledCount++
+                    }
+                    Log.d(TAG, "Rescheduled $scheduledCount pending reminders after boot")
+                } else {
+                    Log.d(TAG, "No pending reminders to reschedule")
                 }
 
-                Log.d(TAG, "Rescheduled $scheduledCount pending reminders after boot")
+                // 2. Reschedule pending schedule events
+                val futureEvents = db.scheduleEventDao().getFutureEvents(now)
+                if (futureEvents.isNotEmpty()) {
+                    var eventScheduledCount = 0
+                    for (event in futureEvents) {
+                        if (!event.isAllDay) {
+                            alarmHelper.scheduleEventAlert(event.id, event.startDatetime, false)
+                            alarmHelper.scheduleEventAlert(event.id, event.startDatetime - 5 * 60 * 1000L, true)
+                            eventScheduledCount++
+                        }
+                    }
+                    Log.d(TAG, "Rescheduled $eventScheduledCount pending events after boot")
+                } else {
+                    Log.d(TAG, "No pending events to reschedule")
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Error rescheduling reminders after boot", e)
+                Log.e(TAG, "Error rescheduling alarms after boot", e)
             } finally {
                 pendingResult.finish()
             }

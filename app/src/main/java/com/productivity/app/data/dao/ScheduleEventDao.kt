@@ -22,6 +22,9 @@ interface ScheduleEventDao {
     )
     fun getUpcomingEvents(from: Long, to: Long): Flow<List<ScheduleEvent>>
 
+    @Query("SELECT * FROM schedule_event WHERE start_datetime >= :now")
+    suspend fun getFutureEvents(now: Long): List<ScheduleEvent>
+
     @Query("SELECT * FROM schedule_event WHERE id = :id")
     suspend fun getEventById(id: Long): ScheduleEvent?
 

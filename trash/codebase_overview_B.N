@@ -1,0 +1,119 @@
+# Personal Manager — Codebase Overview
+
+This document provides a detailed walkthrough of the Personal Manager codebase, mapping its architecture, database schemas, feature implementations, and system-level integrations.
+
+---
+
+## 1. Technology Stack
+* **Language:** Kotlin (JVM 17 / SDK 34)
+* **UI Framework:** Jetpack Compose with Material 3 components
+* **Architecture:** Clean Architecture + MVVM (Model-View-ViewModel)
+* **Dependency Injection:** Dagger Hilt
+* **Local Database:** Room SQLite
+* **Background Processing:** Android WorkManager & AlarmManager
+* **Theme:** Customized Premium Dark Theme (Indigo-focused)
+
+---
+
+## 2. Architectural Structure
+The project follows a standard Clean Architecture layout with a clear separation of concerns across layers.
+
+```mermaid
+graph TD
+    UI[Compose Navigation / Screen Views] --> VM[ViewModels]
+    VM --> UC[Use Cases - Domain Business Logic]
+    UC --> Repos[Repository Interfaces]
+    Repos --> RepoImpls[Repository Implementations - Data Layer]
+    RepoImpls --> DAOs[Room DAOs]
+    DAOs --> DB[Room Database]
+    
+    Service[Service Layer: Receivers & Ring Service] --> DB
+    Service --> AM[AlarmManager / WorkManager]
+```
+
+### File Layout Tree
+All source code lives under the package `com.productivity.app`:
+* [`di/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/di) — Hilt modules for binding and provisioning singletons (Database, DAOs, Repositories).
+* [`data/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data) — Models, Room DAOs, Database definition, Repositories, and Shared Preferences.
+  * [`model/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model) — SQLite table entities.
+  * [`dao/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/dao) — Room data access objects with Coroutine Flow support.
+  * [`db/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/db) — [AppDatabase.kt](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/db/AppDatabase.kt) singleton instance provider.
+  * [`repository/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/repository) — Repository boundaries mapping interfaces to database operations.
+  * [`preferences/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/preferences) — Shared Preferences wrapper for custom alarm tones, vibrations, and ring durations.
+* [`domain/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/domain) — Business-logic-specific Use Cases:
+  * [`reminder/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/domain/reminder) — Reminder CRUD and scheduling use cases.
+  * [`schedule/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/domain/schedule) — Schedule CRUD and daily agenda aggregation.
+  * [`tracker/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/domain/tracker) — Trackers and progress unit state calculations.
+* [`service/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/service) — System-level services and broadcast receivers:
+  * Staged Alarm Scheduling via `AlarmManagerHelper` & `WorkManagerHelper`.
+  * Audio & Vibration execution via `AlarmRingService`.
+  * Notification triggers via `NotificationHelper`.
+  * User actions & System events via `AlarmReceiver`, `DoneReceiver`, `SnoozeReceiver`, and `ReminderBootReceiver`.
+* [`ui/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui) — Compose Presentation Layer:
+  * [`theme/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/theme) — Custom Indigo palette, typographies, and theme setups.
+  * [`navigation/`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/ui/navigation) — Application routes and Screen setups.
+  * Screen subpackages for each feature (Dashboard, Checklist, Notes, Reminders, Schedule, Settings, Tracker).
+
+---
+
+## 3. Database Schema
+Room persistence stores 7 entities ([AppDatabase.kt:L9-21](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/db/AppDatabase.kt#L9-L21)):
+
+| Table Name | Entity Class | Primary Key | Description |
+| :--- | :--- | :--- | :--- |
+| `reminder` | [`Reminder`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/Reminder.kt) | `Long` (Auto-generated) | Alarm/reminder details, priority level, snooze timestamps, recurrence rules, and completed flag. |
+| `schedule_event` | [`ScheduleEvent`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/ScheduleEvent.kt) | `Long` (Auto-generated) | Daily calendar events, meetings, deadlines with start/end time, location, and notes. |
+| `progress_tracker` | [`ProgressTracker`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/ProgressTracker.kt) | `Long` (Auto-generated) | Courses or projects with total/completed progress units and current milestone tracking. |
+| `progress_unit` | [`ProgressUnit`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/ProgressUnit.kt) | `Long` (Auto-generated) | Milestones/modules. Linked to `progress_tracker` via Cascade Delete foreign key. |
+| `checklist` | [`Checklist`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/Checklist.kt) | `Long` (Auto-generated) | Shopping/travel checklists. Supports template-based duplication (`isTemplate`). |
+| `checklist_item` | [`ChecklistItem`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/ChecklistItem.kt) | `Long` (Auto-generated) | Tasks inside a checklist with order sorting indices. Cascade-deleted with Checklist. |
+| `note_log` | [`NoteLog`](file:///c:/Users/Kshitij%20Sharma/Desktop/Omnis/Magnum%20Opus/Personal%20Manager/app/src/main/java/com/productivity/app/data/model/NoteLog.kt) | `Long` (Auto-generated) | Notion-linked note logs categorized by type (journal, learning, research) with web URLs. |
+
+---
+
+## 4. Key Feature Walkthroughs
+
+### A. The Staged Alarm & Notification Engine (Robust Battery Protection)
+Aggressive system power managers (found in OEM builds by Xiaomi, Samsung, etc.) frequently suspend scheduled alarms when set hours in advance. This app bypasses this limitation using a **Staged Alarm Execution flow**:
+
+1. **Scheduling (`WorkManagerHelper`):**
+   * If a reminder is set for **$\le$ 30 minutes** from now: Scheduled directly using exact alarms via `AlarmManagerHelper`'s Doze-safe API `setExactAndAllowWhileIdle()`.
+   * If a reminder is set for **> 30 minutes** from now: A WorkManager staging worker (`ReminderStagingWorker`) is scheduled with an initial delay of `(Delta - 30 minutes)`.
+2. **Staging Firing:**
+   * 30 minutes before the reminder time, the WorkManager worker wakes up, queries the database, and schedules the exact alarm using `AlarmManager`.
+3. **Execution (`AlarmRingService`):**
+   * Once the exact alarm fires, `AlarmReceiver` starts the foreground `AlarmRingService`.
+   * It plays a looping audio tone on the `AudioAttributes.USAGE_ALARM` channel (independent of system media/notification volumes) and vibrates.
+   * A persistent foreground notification displays "Stop" and "Snooze" actions.
+   * Tap actions direct commands to `DoneReceiver` or `SnoozeReceiver`, dismissing the notifications and cleaning up service memory.
+4. **Rescheduling (`ReminderBootReceiver`):**
+   * Restores all pending, future reminders on `BOOT_COMPLETED` or package updates.
+
+---
+
+### B. UI Presentation States
+
+#### 1. Reminders
+* **`ReminderListScreen`:** Grouped timeline view showing active reminders, category icons, priority badges, and swipe-to-complete actions.
+* **`CreateReminderScreen`:** Input form specifying categories (Medicine, Travel, Meeting, Deadline, General), priority chips, dates, times, and recurrence patterns.
+* **`ReminderDetailScreen` & `AlarmSettingsScreen`:** Complete detail view, custom tone picker, toggle switch for vibration, and ring duration configurations.
+
+#### 2. Schedule
+* **`ScheduleListScreen`:** Interactive horizontal date-selector (today $\pm$ 7 days) and a chronological list of events, meetings, and deadlines.
+* **`CreateEventScreen` & `EventDetailScreen`:** Form containing time/date selectors, all-day toggle, location metadata fields, and details summary cards.
+
+#### 3. Tracker
+* **`TrackerListScreen`:** Cards exhibiting course/project completions with animated progress bars, unit counts, and filter options.
+* **`TrackerDetailScreen`:** Displays all sub-modules/milestones checklist. Implements an inline Quick-Add view allowing users to easily add new units.
+
+#### 4. Placeholders (Ready for Expansion)
+* **`DashboardScreen`** — Intended to list today's highlights, active trackers, and upcoming events.
+* **`ChecklistListScreen`** — Boilerplate view ready to connect template cloning database operations.
+* **`NoteLogListScreen`** — Placeholder representing Notion page log aggregators.
+
+---
+
+## 5. Architectural Quality Highlights
+* **Resource Independence:** Uses pure Kotlin flows (`StateFlow` and `SharedFlow`) mapping database changes in real-time straight to Compose screens.
+* **Injectable System Classes:** Uses standard Dagger Hilt constructor injection across ViewModels and Use Cases, ensuring decoupling from framework APIs.
+* **Doze/Standby Compliance:** Combines low-latency exact scheduling (`AlarmManager`) with low-frequency staging queues (`WorkManager`), optimizing system battery while preventing missed alarms.

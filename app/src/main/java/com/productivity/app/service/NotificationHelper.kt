@@ -16,10 +16,14 @@ import androidx.core.content.ContextCompat
 import com.productivity.app.MainActivity
 import com.productivity.app.R
 import com.productivity.app.data.model.Reminder
+import com.productivity.app.data.model.ScheduleEvent
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import android.media.RingtoneManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Creates typed notification channels on app startup and builds
@@ -246,6 +250,100 @@ class NotificationHelper @Inject constructor(
      */
     fun cancelNotification(reminderId: Long) {
         NotificationManagerCompat.from(context).cancel(reminderId.toInt())
+    }
+
+    /**
+     * Builds and posts a notification for the given schedule event.
+     * Sound is played by AlarmRingService, so the notification is silent.
+     */
+    fun showEventNotification(event: ScheduleEvent, isPreAlert: Boolean) {
+        val channelId = getChannelForType(event.type)
+        val notificationId = event.id.toInt() + 100000
+
+        // Content tap intent — opens the app
+        val contentIntent = Intent(context, MainActivity::class.java).apply {
+            putExtra("extra_event_id", event.id)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val contentPendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            contentIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // "Dismiss" action
+        val stopIntent = Intent(context, DoneReceiver::class.java).apply {
+            putExtra(AlarmManagerHelper.EXTRA_EVENT_ID, event.id)
+        }
+        val stopPendingIntent = PendingIntent.getBroadcast(
+            context,
+            notificationId * 10 + 1,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val title = if (isPreAlert) {
+            "⏰ Upcoming Event: ${event.title}"
+        } else {
+            "🔔 Event Starting: ${event.title}"
+        }
+
+        val timeFormatter = SimpleDateFormat("h:mm a", Locale.getDefault())
+        val timeStr = timeFormatter.format(Date(event.startDatetime))
+
+        val contentText = buildString {
+            if (isPreAlert) {
+                append("Starts in 5 minutes ($timeStr)")
+            } else {
+                append("Starting now ($timeStr)")
+            }
+            if (!event.location.isNullOrBlank()) {
+                append(" at ${event.location}")
+            }
+        }
+
+        val isHighPriority = channelId in listOf(CHANNEL_MEDICINE, CHANNEL_MEETING, CHANNEL_DEADLINE)
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle(title)
+            .setContentText(contentText)
+            .setPriority(
+                if (isHighPriority)
+                    NotificationCompat.PRIORITY_HIGH
+                else
+                    NotificationCompat.PRIORITY_DEFAULT
+            )
+            .setSound(
+                if (isHighPriority) RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                else RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            )
+            .setVibrate(
+                if (isHighPriority) longArrayOf(0, 500, 250, 500)
+                else null
+            )
+            .setContentIntent(contentPendingIntent)
+            .setAutoCancel(true)
+            .addAction(0, "✓ Dismiss", stopPendingIntent)
+            .setCategory(NotificationCompat.CATEGORY_EVENT)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setSilent(true) // Sound played by AlarmRingService
+            .build()
+
+        // Check notification permission on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.w(TAG, "POST_NOTIFICATIONS permission not granted — skipping notification")
+                return
+            }
+        }
+
+        NotificationManagerCompat.from(context).notify(notificationId, notification)
+        Log.d(TAG, "Posted notification for event ${event.id} (isPreAlert=$isPreAlert)")
     }
 
     /**

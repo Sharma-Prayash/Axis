@@ -31,7 +31,32 @@ fun NavGraph(navController: NavHostController) {
     ) {
         // ── Dashboard ────────────────────────────────────────
         composable(Screen.Dashboard.route) {
-            DashboardScreen()
+            DashboardScreen(
+                onNavigateToReminders = {
+                    navController.navigate(Screen.Reminders.route) {
+                        launchSingleTop = true
+                    }
+                },
+                onNavigateToSchedule = {
+                    navController.navigate(Screen.Schedule.route) {
+                        launchSingleTop = true
+                    }
+                },
+                onNavigateToTrackers = {
+                    navController.navigate(Screen.Trackers.route) {
+                        launchSingleTop = true
+                    }
+                },
+                onNavigateToReminderDetail = { reminderId ->
+                    navController.navigate(Screen.ReminderDetail.createRoute(reminderId))
+                },
+                onNavigateToEventDetail = { eventId ->
+                    navController.navigate(Screen.EventDetail.createRoute(eventId))
+                },
+                onNavigateToTrackerDetail = { trackerId ->
+                    navController.navigate(Screen.TrackerDetail.createRoute(trackerId))
+                }
+            )
         }
 
         // ── Reminders ────────────────────────────────────────

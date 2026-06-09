@@ -23,6 +23,7 @@ import com.productivity.app.MainActivity
 import com.productivity.app.R
 import com.productivity.app.data.db.AppDatabase
 import com.productivity.app.data.preferences.AlarmPreferences
+import com.productivity.app.data.model.ScheduleEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -44,6 +45,8 @@ class AlarmRingService : Service() {
     companion object {
         private const val TAG = "AlarmRingService"
         const val EXTRA_REMINDER_ID = "extra_reminder_id"
+        const val EXTRA_EVENT_ID = "extra_event_id"
+        const val EXTRA_IS_PRE_ALERT = "extra_is_pre_alert"
         private const val ONGOING_NOTIFICATION_ID = 9999
         private const val CHANNEL_ALARM_RING = "channel_alarm_ring"
     }
@@ -53,6 +56,8 @@ class AlarmRingService : Service() {
     private val stopHandler = Handler(Looper.getMainLooper())
     private var stopRunnable: Runnable? = null
     private var currentReminderId: Long = -1L
+    private var currentEventId: Long = -1L
+    private var currentIsPreAlert: Boolean = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -63,32 +68,38 @@ class AlarmRingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val reminderId = intent?.getLongExtra(EXTRA_REMINDER_ID, -1L) ?: -1L
-        if (reminderId == -1L) {
-            Log.e(TAG, "Started with no reminder ID — stopping")
+        val eventId = intent?.getLongExtra(EXTRA_EVENT_ID, -1L) ?: -1L
+        val isPreAlert = intent?.getBooleanExtra(EXTRA_IS_PRE_ALERT, false) ?: false
+
+        if (reminderId == -1L && eventId == -1L) {
+            Log.e(TAG, "Started with neither reminder ID nor event ID — stopping")
             stopSelf()
             return START_NOT_STICKY
         }
 
-        // If already ringing for a different reminder, stop the old one first
-        if (currentReminderId != -1L && currentReminderId != reminderId) {
-            Log.d(TAG, "Already ringing for reminder $currentReminderId, stopping to ring for $reminderId")
-            stopAlarm()
-        }
+        // If already ringing, stop the old one first
+        stopAlarm()
 
         currentReminderId = reminderId
-        Log.d(TAG, "Starting alarm ring for reminder $reminderId")
+        currentEventId = eventId
+        currentIsPreAlert = isPreAlert
+        Log.d(TAG, "Starting alarm ring for reminder=$reminderId, event=$eventId, isPreAlert=$isPreAlert")
 
         // Build and show the foreground notification first (required before startForeground)
-        val notification = buildOngoingNotification(reminderId)
+        val notification = buildOngoingNotification(reminderId, eventId, isPreAlert)
         startForeground(ONGOING_NOTIFICATION_ID, notification)
 
-        // Post the rich reminder notification (with Done/Snooze buttons)
-        postReminderNotification(reminderId)
+        // Post the rich reminder or event notification
+        if (reminderId != -1L) {
+            postReminderNotification(reminderId)
+        } else {
+            postEventNotification(eventId, isPreAlert)
+        }
 
         // Start the alarm sound and vibration
         playAlarm()
         startVibration()
-        scheduleAutoStop()
+        scheduleAutoStop(eventId != -1L)
 
         return START_NOT_STICKY
     }
@@ -186,12 +197,16 @@ class AlarmRingService : Service() {
 
     // ── Auto-Stop Scheduling ────────────────────────────────────────
 
-    private fun scheduleAutoStop() {
+    private fun scheduleAutoStop(isEvent: Boolean) {
         // Cancel any existing auto-stop
         stopRunnable?.let { stopHandler.removeCallbacks(it) }
 
-        val prefs = AlarmPreferences(applicationContext)
-        val durationSeconds = prefs.ringDurationSeconds
+        val durationSeconds = if (isEvent) {
+            30
+        } else {
+            val prefs = AlarmPreferences(applicationContext)
+            prefs.ringDurationSeconds
+        }
 
         if (durationSeconds == AlarmPreferences.RING_UNTIL_DISMISSED) {
             Log.d(TAG, "Ring duration set to 'until dismissed' — no auto-stop")
@@ -218,6 +233,8 @@ class AlarmRingService : Service() {
         stopRunnable?.let { stopHandler.removeCallbacks(it) }
         stopRunnable = null
         currentReminderId = -1L
+        currentEventId = -1L
+        currentIsPreAlert = false
     }
 
     private fun releaseMediaPlayer() {
@@ -257,57 +274,71 @@ class AlarmRingService : Service() {
      * Builds the ongoing foreground notification shown while the alarm is ringing.
      * Includes "Stop" and "Snooze" action buttons.
      */
-    private fun buildOngoingNotification(reminderId: Long): Notification {
-        // "Stop" action — uses DoneReceiver to mark as done and stop the service
-        val doneIntent = Intent(this, DoneReceiver::class.java).apply {
-            putExtra(NotificationHelper.EXTRA_REMINDER_ID, reminderId)
+    private fun buildOngoingNotification(reminderId: Long, eventId: Long, isPreAlert: Boolean): Notification {
+        val stopIntent = Intent(this, DoneReceiver::class.java).apply {
+            if (reminderId != -1L) {
+                putExtra(NotificationHelper.EXTRA_REMINDER_ID, reminderId)
+            } else {
+                putExtra(AlarmManagerHelper.EXTRA_EVENT_ID, eventId)
+            }
         }
-        val donePendingIntent = PendingIntent.getBroadcast(
+        val stopPendingIntent = PendingIntent.getBroadcast(
             this,
-            reminderId.toInt() * 100 + 1,
-            doneIntent,
+            if (reminderId != -1L) reminderId.toInt() * 100 + 1 else eventId.toInt() * 100 + 1 + 200000,
+            stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // "Snooze" action
-        val snoozeIntent = Intent(this, SnoozeReceiver::class.java).apply {
-            putExtra(NotificationHelper.EXTRA_REMINDER_ID, reminderId)
-            putExtra(
-                NotificationHelper.EXTRA_SNOOZE_DURATION_MS,
-                NotificationHelper.DEFAULT_SNOOZE_MINUTES * 60 * 1000L
-            )
-        }
-        val snoozePendingIntent = PendingIntent.getBroadcast(
-            this,
-            reminderId.toInt() * 100 + 2,
-            snoozeIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Tap content intent — opens the app
         val contentIntent = Intent(this, MainActivity::class.java).apply {
-            putExtra(NotificationHelper.EXTRA_REMINDER_ID, reminderId)
+            if (reminderId != -1L) {
+                putExtra(NotificationHelper.EXTRA_REMINDER_ID, reminderId)
+            } else {
+                putExtra(AlarmManagerHelper.EXTRA_EVENT_ID, eventId)
+            }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val contentPendingIntent = PendingIntent.getActivity(
             this,
-            reminderId.toInt() * 100,
+            if (reminderId != -1L) reminderId.toInt() * 100 else eventId.toInt() * 100 + 200000,
             contentIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ALARM_RING)
+        val title = when {
+            reminderId != -1L -> "⏰ Alarm Ringing"
+            isPreAlert -> "⏰ Event Starting Soon"
+            else -> "🔔 Event Starting"
+        }
+
+        val builder = NotificationCompat.Builder(this, CHANNEL_ALARM_RING)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("⏰ Alarm Ringing")
-            .setContentText("Tap to open, or use actions below")
+            .setContentTitle(title)
+            .setContentText("Tap to open, or dismiss below")
             .setOngoing(true)
             .setContentIntent(contentPendingIntent)
-            .addAction(0, "✓ Stop", donePendingIntent)
-            .addAction(0, "⏰ Snooze ${NotificationHelper.DEFAULT_SNOOZE_MINUTES}m", snoozePendingIntent)
+            .addAction(0, "✓ Dismiss", stopPendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setSilent(true)
-            .build()
+
+        if (reminderId != -1L) {
+            val snoozeIntent = Intent(this, SnoozeReceiver::class.java).apply {
+                putExtra(NotificationHelper.EXTRA_REMINDER_ID, reminderId)
+                putExtra(
+                    NotificationHelper.EXTRA_SNOOZE_DURATION_MS,
+                    NotificationHelper.DEFAULT_SNOOZE_MINUTES * 60 * 1000L
+                )
+            }
+            val snoozePendingIntent = PendingIntent.getBroadcast(
+                this,
+                reminderId.toInt() * 100 + 2,
+                snoozeIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(0, "⏰ Snooze ${NotificationHelper.DEFAULT_SNOOZE_MINUTES}m", snoozePendingIntent)
+        }
+
+        return builder.build()
     }
 
     /**
@@ -339,6 +370,26 @@ class AlarmRingService : Service() {
                 Log.d(TAG, "Rich reminder notification posted for $reminderId")
             } catch (e: Exception) {
                 Log.e(TAG, "Error posting reminder notification for $reminderId", e)
+            }
+        }
+    }
+
+    private fun postEventNotification(eventId: Long, isPreAlert: Boolean) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val db = AppDatabase.getInstanceForWorker(applicationContext)
+                val event = db.scheduleEventDao().getEventById(eventId)
+
+                if (event == null) {
+                    Log.w(TAG, "Event $eventId not found — skipping notification")
+                    return@launch
+                }
+
+                val notificationHelper = NotificationHelper(applicationContext)
+                notificationHelper.showEventNotification(event, isPreAlert)
+                Log.d(TAG, "Rich event notification posted for $eventId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error posting event notification for $eventId", e)
             }
         }
     }

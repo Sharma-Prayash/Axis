@@ -24,6 +24,8 @@ class AlarmManagerHelper @Inject constructor(
 
     companion object {
         const val EXTRA_REMINDER_ID = "extra_reminder_id"
+        const val EXTRA_EVENT_ID = "extra_event_id"
+        const val EXTRA_IS_PRE_ALERT = "extra_is_pre_alert"
         private const val TAG = "AlarmManagerHelper"
     }
 
@@ -72,6 +74,84 @@ class AlarmManagerHelper @Inject constructor(
         alarmManager.cancel(pendingIntent)
         pendingIntent.cancel()
         Log.d(TAG, "Cancelled alarm for reminder $reminderId")
+    }
+
+    /**
+     * Schedules an alert for a schedule event (either 5-min pre-alert or on-time).
+     */
+    fun scheduleEventAlert(eventId: Long, triggerAtMillis: Long, isPreAlert: Boolean) {
+        val now = System.currentTimeMillis()
+        if (triggerAtMillis <= now) {
+            Log.d(TAG, "Not scheduling alarm for event $eventId (isPreAlert=$isPreAlert) because trigger time is in the past")
+            return
+        }
+
+        val requestCode = getEventRequestCode(eventId, isPreAlert)
+        val pendingIntent = buildEventPendingIntent(eventId, isPreAlert, requestCode)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (alarmManager.canScheduleExactAlarms()) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+                Log.d(TAG, "Scheduled exact event alarm for event $eventId (isPreAlert=$isPreAlert) at $triggerAtMillis")
+            } else {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+                Log.w(TAG, "Exact alarm permission denied — using inexact for event $eventId (isPreAlert=$isPreAlert)")
+            }
+        } else {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                pendingIntent
+            )
+            Log.d(TAG, "Scheduled exact event alarm for event $eventId (isPreAlert=$isPreAlert) at $triggerAtMillis")
+        }
+    }
+
+    /**
+     * Cancels both pre-alert and on-time alerts for the given schedule event.
+     */
+    fun cancelEventAlerts(eventId: Long) {
+        val preCode = getEventRequestCode(eventId, true)
+        val preIntent = buildEventPendingIntent(eventId, true, preCode)
+        alarmManager.cancel(preIntent)
+        preIntent.cancel()
+
+        val onTimeCode = getEventRequestCode(eventId, false)
+        val onTimeIntent = buildEventPendingIntent(eventId, false, onTimeCode)
+        alarmManager.cancel(onTimeIntent)
+        onTimeIntent.cancel()
+
+        Log.d(TAG, "Cancelled alerts for event $eventId")
+    }
+
+    private fun getEventRequestCode(eventId: Long, isPreAlert: Boolean): Int {
+        val base = eventId.toInt()
+        return if (isPreAlert) {
+            base * 2 + 200000
+        } else {
+            base * 2 + 200001
+        }
+    }
+
+    private fun buildEventPendingIntent(eventId: Long, isPreAlert: Boolean, requestCode: Int): PendingIntent {
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            putExtra(EXTRA_EVENT_ID, eventId)
+            putExtra(EXTRA_IS_PRE_ALERT, isPreAlert)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     /**

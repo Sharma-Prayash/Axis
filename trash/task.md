@@ -130,32 +130,32 @@
 > **Goal:** Checklists work with template support; Notion deep-link triggers correctly.
 
 ### Checklist UI
-- [ ] `ChecklistListScreen.kt` — lists all active checklists + available templates
-- [ ] `CreateChecklistScreen.kt` — create checklist with type + items
-- [ ] `ChecklistDetailScreen.kt` — check off items, view completion status
-- [ ] `ChecklistViewModel.kt` — exposes checklists + items as StateFlow
+- [x] `ChecklistListScreen.kt` — lists all active checklists + available templates
+- [x] `CreateChecklistScreen.kt` — create checklist with type + items
+- [x] `ChecklistDetailScreen.kt` — check off items, view completion status
+- [x] `ChecklistViewModel.kt` — exposes checklists + items as StateFlow
 
 ### Checklist Domain (Use Cases)
-- [ ] `CreateChecklistUseCase.kt`
-- [ ] `DuplicateTemplateUseCase.kt` (copies a template into a new active checklist)
-- [ ] `CheckItemUseCase.kt`
-- [ ] `DeleteChecklistUseCase.kt`
+- [x] `CreateChecklistUseCase.kt`
+- [x] `DuplicateTemplateUseCase.kt` (copies a template into a new active checklist)
+- [x] `CheckItemUseCase.kt`
+- [x] `DeleteChecklistUseCase.kt`
 
 ### Note Log + Notion Integration
-- [ ] `NotionDeepLinkHelper.kt` — builds correct `notion://` URI per note type:
-  - [ ] `journal` type → Journal template
-  - [ ] `learning` type → Learning note template
-  - [ ] `research` type → Research note template
-  - [ ] `meeting` type → Meeting note template
-  - [ ] Fallback to `https://` if Notion app is not installed
-- [ ] `NoteLogListScreen.kt` — timeline list of all `note_log` entries, filterable by type
-- [ ] `CreateNoteLogScreen.kt` — create local metadata entry + launch Notion deep-link
-- [ ] `NoteLogViewModel.kt` — exposes note log entries as StateFlow
+- [x] `NotionDeepLinkHelper.kt` — builds correct `notion://` URI per note type:
+  - [x] `journal` type → Journal template
+  - [x] `learning` type → Learning note template
+  - [x] `research` type → Research note template
+  - [x] `meeting` type → Meeting note template
+  - [x] Fallback to `https://` if Notion app is not installed
+- [x] `NoteLogListScreen.kt` — timeline list of all `note_log` entries, filterable by type
+- [x] `CreateNoteLogScreen.kt` — create local metadata entry + launch Notion deep-link
+- [x] `NoteLogViewModel.kt` — exposes note log entries as StateFlow
 
 ### Note Log Domain (Use Cases)
-- [ ] `CreateNoteLogUseCase.kt`
-- [ ] `OpenNotionNoteUseCase.kt` (fires deep-link intent)
-- [ ] `DeleteNoteLogUseCase.kt`
+- [x] `CreateNoteLogUseCase.kt`
+- [x] `OpenNotionNoteUseCase.kt` (fires deep-link intent)
+- [x] `DeleteNoteLogUseCase.kt`
 
 ---
 
@@ -163,34 +163,34 @@
 > **Goal:** Coherent home screen, all edge cases handled, app ready for daily use.
 
 ### Dashboard Screen
-- [ ] `DashboardScreen.kt` — unified home showing:
-  - [ ] Today's reminders (next 3)
-  - [ ] Upcoming schedule events (next 2)
-  - [ ] Active trackers summary with progress bars
-- [ ] `DashboardViewModel.kt` — aggregates data from all repositories
+- [x] `DashboardScreen.kt` — unified home showing:
+  - [x] Today's reminders (up to 5)
+  - [x] Upcoming schedule events (next 7 days, up to 5)
+  - [x] Active trackers summary with progress bars
+- [x] `DashboardViewModel.kt` — aggregates data from all repositories
 
 ### UI Polish
-- [ ] Apply consistent design system (dark mode, accent color, typography)
-- [ ] Add empty states to every screen (no data placeholders)
-- [ ] Add loading states to all async operations
-- [ ] Add `Settings` screen (notification channel preferences, app info)
+- [x] Apply consistent design system (dark mode, accent color, typography)
+- [x] Add empty states to every screen (no data placeholders)
+- [x] Add loading states to all async operations
+- [x] Add `Settings` screen (notification channel preferences, app info)
 
 ### Design System
-- [ ] Define `Color.kt` (dark background, surface, accent palette)
-- [ ] Define `Type.kt` (Inter/Roboto font scale)
-- [ ] Define `Theme.kt` (MaterialTheme wiring for Compose)
-- [ ] Create reusable Compose components in `ui/common/`:
-  - [ ] `SectionHeader.kt`
-  - [ ] `ReminderCard.kt`
-  - [ ] `ProgressCard.kt`
-  - [ ] `EmptyState.kt`
-  - [ ] `ConfirmDialog.kt`
+- [x] Define `Color.kt` (dark background, surface, accent palette)
+- [x] Define `Type.kt` (Inter/Roboto font scale)
+- [x] Define `Theme.kt` (MaterialTheme wiring for Compose)
+- [x] Create reusable Compose components in `ui/common/`:
+  - [x] `SectionHeader.kt`
+  - [x] `ReminderCard.kt`
+  - [x] `ProgressCard.kt`
+  - [x] `EmptyState.kt`
+  - [x] `ConfirmDialog.kt`
 
 ### Edge Case & Stability Testing
 - [ ] Concurrent reminders (multiple alarms at the same time)
 - [ ] Very long titles and notes (overflow handling)
 - [ ] All screens tested with zero data (empty states)
-- [ ] Room queries verified to run on background thread (no ANRs)
+- [x] Room queries verified to run on background thread (no ANRs)
 - [ ] Final real-device test across all features
 
 ---
@@ -198,7 +198,7 @@
 ## Phase 2 Backlog (Post-MVP)
 > These items are intentionally deferred. Do not implement during Phase 1.
 
-- [ ] Notion API integration — auto-create pages from within the app
+- [x] Notion API integration — auto-create pages from within the app
 - [ ] AI-generated learning session summaries pushed to Notion
 - [ ] AI article summarization (URL → summary → Notion)
 - [ ] Daily review generation (automated evening journal entry)
@@ -207,3 +207,4 @@
 - [ ] Kotlin Multiplatform (Windows/Linux/macOS desktop app)
 - [ ] Cloud sync — Firestore or Supabase via repository swap
 - [ ] Habit tracking module
+- [ ] Cloud sync — Supabase via repository swap
