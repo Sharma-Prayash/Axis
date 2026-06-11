@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
@@ -74,6 +75,16 @@
             android:name=".service.AlarmRingService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <!-- Focus Timer Service — foreground service for active focus session ticking -->
+        <service
+            android:name=".service.FocusTimerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Ticking study timer to maintain progress in database and show session controls in notification" />
+        </service>
 
     </application>
 </manifest>

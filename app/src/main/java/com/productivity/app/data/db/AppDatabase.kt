@@ -15,9 +15,11 @@ import com.productivity.app.data.model.*
         Checklist::class,
         ChecklistItem::class,
         NoteLog::class,
-        WeeklyGoal::class
+        WeeklyGoal::class,
+        FocusTask::class,
+        FocusLog::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -29,6 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun checklistItemDao(): ChecklistItemDao
     abstract fun noteLogDao(): NoteLogDao
     abstract fun weeklyGoalDao(): WeeklyGoalDao
+    abstract fun focusDao(): FocusDao
 
     companion object {
         @Volatile

@@ -25,6 +25,8 @@ import com.productivity.app.ui.tracker.TrackerListScreen
 import com.productivity.app.ui.statistics.StatisticsScreen
 import com.productivity.app.ui.personalmanager.PersonalManagerScreen
 import com.productivity.app.ui.alarm.AlarmActiveScreen
+import com.productivity.app.ui.focus.FocusListScreen
+import com.productivity.app.ui.focus.FocusTimerScreen
 
 @Composable
 fun NavGraph(navController: NavHostController) {
@@ -248,6 +250,27 @@ fun NavGraph(navController: NavHostController) {
                 reminderId = reminderId,
                 eventId = eventId,
                 onDismiss = { navController.popBackStack() }
+            )
+        }
+
+        // ── Focus ───────────────────────────────────────────
+        composable(Screen.FocusList.route) {
+            FocusListScreen(
+                onNavigateToTimer = { taskId ->
+                    navController.navigate(Screen.FocusTimer.createRoute(taskId))
+                }
+            )
+        }
+        composable(
+            route = Screen.FocusTimer.route,
+            arguments = listOf(
+                navArgument("taskId") { type = NavType.LongType }
+            )
+        ) { backStackEntry ->
+            val taskId = backStackEntry.arguments?.getLong("taskId") ?: return@composable
+            FocusTimerScreen(
+                taskId = taskId,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
     }

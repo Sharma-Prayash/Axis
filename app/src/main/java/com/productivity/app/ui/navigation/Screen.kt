@@ -161,8 +161,24 @@ sealed class Screen(
             "alarm_active?reminderId=${reminderId ?: -1L}&eventId=${eventId ?: -1L}"
     }
 
+    data object FocusList : Screen(
+        route = "focus_list",
+        title = "Focus",
+        selectedIcon = Icons.Filled.Timer,
+        unselectedIcon = Icons.Outlined.Timer
+    )
+
+    data object FocusTimer : Screen(
+        route = "focus_timer/{taskId}",
+        title = "Focus Timer",
+        selectedIcon = Icons.Filled.Timer,
+        unselectedIcon = Icons.Outlined.Timer
+    ) {
+        fun createRoute(taskId: Long) = "focus_timer/$taskId"
+    }
+
     companion object {
         /** Items displayed in the bottom navigation bar */
-        val bottomNavItems = listOf(Dashboard, Reminders, Schedule, Trackers, Statistics, Notes)
+        val bottomNavItems = listOf(Dashboard, Reminders, Schedule, Trackers, FocusList, Statistics, Notes)
     }
 }

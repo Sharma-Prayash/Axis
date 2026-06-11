@@ -38,6 +38,7 @@ object DatabaseModule {
     @Provides fun provideChecklistItemDao(db: AppDatabase) = db.checklistItemDao()
     @Provides fun provideNoteLogDao(db: AppDatabase) = db.noteLogDao()
     @Provides fun provideWeeklyGoalDao(db: AppDatabase) = db.weeklyGoalDao()
+    @Provides fun provideFocusDao(db: AppDatabase) = db.focusDao()
 }
 
 @Module
@@ -61,4 +62,7 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindWeeklyGoalRepository(impl: WeeklyGoalRepositoryImpl): WeeklyGoalRepository
+
+    @Binds @Singleton
+    abstract fun bindFocusRepository(impl: FocusRepositoryImpl): FocusRepository
 }
