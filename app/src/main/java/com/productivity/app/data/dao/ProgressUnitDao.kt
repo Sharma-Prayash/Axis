@@ -30,4 +30,10 @@ interface ProgressUnitDao {
 
     @Query("DELETE FROM progress_unit WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(units: List<ProgressUnit>)
+
+    @Query("SELECT * FROM progress_unit WHERE tracker_id = :trackerId AND is_completed = 1 AND completed_at >= :startMs AND completed_at <= :endMs")
+    fun getCompletedUnitsForTrackerInDateRange(trackerId: Long, startMs: Long, endMs: Long): Flow<List<ProgressUnit>>
 }

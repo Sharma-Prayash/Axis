@@ -25,3 +25,5 @@ Thumbs.db
 # Keystore
 *.jks
 *.keystore
+
+Upgrades.txt

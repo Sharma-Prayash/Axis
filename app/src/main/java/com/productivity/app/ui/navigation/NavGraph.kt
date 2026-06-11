@@ -22,6 +22,9 @@ import com.productivity.app.ui.settings.AlarmSettingsScreen
 import com.productivity.app.ui.tracker.CreateTrackerScreen
 import com.productivity.app.ui.tracker.TrackerDetailScreen
 import com.productivity.app.ui.tracker.TrackerListScreen
+import com.productivity.app.ui.statistics.StatisticsScreen
+import com.productivity.app.ui.personalmanager.PersonalManagerScreen
+import com.productivity.app.ui.alarm.AlarmActiveScreen
 
 @Composable
 fun NavGraph(navController: NavHostController) {
@@ -55,6 +58,9 @@ fun NavGraph(navController: NavHostController) {
                 },
                 onNavigateToTrackerDetail = { trackerId ->
                     navController.navigate(Screen.TrackerDetail.createRoute(trackerId))
+                },
+                onNavigateToPersonalManager = {
+                    navController.navigate(Screen.PersonalManager.route)
                 }
             )
         }
@@ -194,6 +200,54 @@ fun NavGraph(navController: NavHostController) {
             ChecklistDetailScreen(
                 checklistId = checklistId,
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // ── Statistics ───────────────────────────────────────
+        composable(Screen.Statistics.route) {
+            StatisticsScreen(
+                onNavigateToTrackerDetail = { trackerId ->
+                    navController.navigate(Screen.TrackerDetail.createRoute(trackerId))
+                }
+            )
+        }
+
+        // ── Personal Manager ──────────────────────────────────
+        composable(Screen.PersonalManager.route) {
+            PersonalManagerScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToReminderDetail = { reminderId ->
+                    navController.navigate(Screen.ReminderDetail.createRoute(reminderId))
+                },
+                onNavigateToEventDetail = { eventId ->
+                    navController.navigate(Screen.EventDetail.createRoute(eventId))
+                },
+                onNavigateToTrackerDetail = { trackerId ->
+                    navController.navigate(Screen.TrackerDetail.createRoute(trackerId))
+                }
+            )
+        }
+
+        // ── Alarm Active ──────────────────────────────────────
+        composable(
+            route = Screen.AlarmActive.route,
+            arguments = listOf(
+                navArgument("reminderId") { 
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
+                navArgument("eventId") { 
+                    type = NavType.LongType
+                    defaultValue = -1L
+                }
+            )
+        ) { backStackEntry ->
+            val reminderId = backStackEntry.arguments?.getLong("reminderId") ?: -1L
+            val eventId = backStackEntry.arguments?.getLong("eventId") ?: -1L
+            AlarmActiveScreen(
+                reminderId = reminderId,
+                eventId = eventId,
+                onDismiss = { navController.popBackStack() }
             )
         }
     }

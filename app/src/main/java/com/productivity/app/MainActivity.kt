@@ -20,6 +20,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import android.content.Intent
+import com.productivity.app.service.AlarmManagerHelper
+import com.productivity.app.service.NotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -35,16 +38,52 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var reminderIdParam by mutableStateOf<Long?>(null)
+    private var eventIdParam by mutableStateOf<Long?>(null)
+    private var openPersonalManager by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         requestNotificationPermission()
+        handleIntent(intent)
 
         setContent {
             ProductivityTheme {
-                MainScreen()
+                MainScreen(
+                    alarmReminderId = reminderIdParam,
+                    alarmEventId = eventIdParam,
+                    openPersonalManager = openPersonalManager,
+                    onClearAlarm = {
+                        reminderIdParam = null
+                        eventIdParam = null
+                    },
+                    onClearOpenPersonalManager = {
+                        openPersonalManager = false
+                    }
+                )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        val reminderId = intent?.getLongExtra(NotificationHelper.EXTRA_REMINDER_ID, -1L) ?: -1L
+        val eventId = intent?.getLongExtra(AlarmManagerHelper.EXTRA_EVENT_ID, -1L) ?: -1L
+        
+        if (reminderId != -1L) {
+            reminderIdParam = reminderId
+        }
+        if (eventId != -1L) {
+            eventIdParam = eventId
+        }
+        if (intent?.getBooleanExtra("extra_open_personal_manager", false) == true) {
+            openPersonalManager = true
         }
     }
 
@@ -62,10 +101,30 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    alarmReminderId: Long?,
+    alarmEventId: Long?,
+    openPersonalManager: Boolean,
+    onClearAlarm: () -> Unit,
+    onClearOpenPersonalManager: () -> Unit
+) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+
+    LaunchedEffect(alarmReminderId, alarmEventId, openPersonalManager) {
+        if (alarmReminderId != null || alarmEventId != null) {
+            navController.navigate(Screen.AlarmActive.createRoute(alarmReminderId, alarmEventId)) {
+                launchSingleTop = true
+            }
+            onClearAlarm()
+        } else if (openPersonalManager) {
+            navController.navigate(Screen.PersonalManager.route) {
+                launchSingleTop = true
+            }
+            onClearOpenPersonalManager()
+        }
+    }
 
     // Only show bottom bar on top-level destinations
     val showBottomBar = Screen.bottomNavItems.any { screen ->

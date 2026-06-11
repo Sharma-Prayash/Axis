@@ -24,7 +24,9 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "productivity_database"
-        ).build()
+        )
+        .fallbackToDestructiveMigration()
+        .build()
     }
 
     // DAO providers
@@ -35,6 +37,7 @@ object DatabaseModule {
     @Provides fun provideChecklistDao(db: AppDatabase) = db.checklistDao()
     @Provides fun provideChecklistItemDao(db: AppDatabase) = db.checklistItemDao()
     @Provides fun provideNoteLogDao(db: AppDatabase) = db.noteLogDao()
+    @Provides fun provideWeeklyGoalDao(db: AppDatabase) = db.weeklyGoalDao()
 }
 
 @Module
@@ -55,4 +58,7 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindNoteLogRepository(impl: NoteLogRepositoryImpl): NoteLogRepository
+
+    @Binds @Singleton
+    abstract fun bindWeeklyGoalRepository(impl: WeeklyGoalRepositoryImpl): WeeklyGoalRepository
 }

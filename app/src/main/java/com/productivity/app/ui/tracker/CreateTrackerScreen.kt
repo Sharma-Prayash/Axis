@@ -27,6 +27,7 @@ fun CreateTrackerScreen(
     var title by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf("course") }
     var description by remember { mutableStateOf("") }
+    val modules = remember { mutableStateListOf("") }
 
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -146,16 +147,91 @@ fun CreateTrackerScreen(
                 shape = RoundedCornerShape(12.dp)
             )
 
+            // ── Course Modules Input ─────────────────────────
+            if (selectedType == "course") {
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Text(
+                    text = "Modules List",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                modules.forEachIndexed { index, moduleTitle ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = moduleTitle,
+                            onValueChange = { modules[index] = it },
+                            placeholder = { Text("Module ${index + 1} Title") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = InfoBlue,
+                                unfocusedBorderColor = DarkSurfaceVariant,
+                                focusedLabelColor = InfoBlue,
+                                unfocusedLabelColor = TextTertiary,
+                                cursorColor = InfoBlue,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = { 
+                                if (modules.size > 1) {
+                                    modules.removeAt(index)
+                                } else {
+                                    modules[0] = ""
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Delete,
+                                contentDescription = "Delete Module",
+                                tint = AccentPrimary
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                TextButton(
+                    onClick = { modules.add("") },
+                    colors = ButtonDefaults.textButtonColors(contentColor = InfoBlue)
+                ) {
+                    Icon(imageVector = Icons.Outlined.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add Module")
+                }
+            }
+
             Spacer(modifier = Modifier.height(32.dp))
 
             // ── Create Button ────────────────────────────────
             Button(
                 onClick = {
-                    viewModel.createTracker(
-                        title = title,
-                        type = selectedType,
-                        description = description
-                    )
+                    if (selectedType == "course") {
+                        val nonEmptyModules = modules.filter { it.isNotBlank() }
+                        viewModel.createTrackerWithModules(
+                            title = title,
+                            type = selectedType,
+                            description = description,
+                            modules = nonEmptyModules
+                        )
+                    } else {
+                        viewModel.createTracker(
+                            title = title,
+                            type = selectedType,
+                            description = description
+                        )
+                    }
                 },
                 enabled = title.isNotBlank() && !isLoading,
                 modifier = Modifier

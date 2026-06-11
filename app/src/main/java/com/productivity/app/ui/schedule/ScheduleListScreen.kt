@@ -47,11 +47,11 @@ fun ScheduleListScreen(
         }
     }
 
-    // Generate the day selector: today ± 7 days
-    val days = remember {
-        val calendar = Calendar.getInstance()
-        calendar.add(Calendar.DAY_OF_MONTH, -3)
-        (0 until 14).map { i ->
+    // Generate the day selector: selectedDate ± 6 days
+    val days = remember(selectedDate) {
+        val calendar = Calendar.getInstance().apply { timeInMillis = selectedDate }
+        calendar.add(Calendar.DAY_OF_MONTH, -6)
+        (0 until 13).map { i ->
             val dayMillis = calendar.timeInMillis
             calendar.add(Calendar.DAY_OF_MONTH, 1)
             dayMillis
@@ -78,15 +78,67 @@ fun ScheduleListScreen(
         ) {
             // ── Date Selector ─────────────────────────────────
             item {
+                var showDatePicker by remember { mutableStateOf(false) }
+
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Schedule",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    modifier = Modifier.padding(horizontal = 20.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Schedule",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(
+                            imageVector = Icons.Outlined.CalendarToday,
+                            contentDescription = "Pick Date from Calendar",
+                            tint = AccentPrimary
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(16.dp))
+
+                if (showDatePicker) {
+                    val datePickerState = rememberDatePickerState(
+                        initialSelectedDateMillis = selectedDate
+                    )
+                    DatePickerDialog(
+                        onDismissRequest = { showDatePicker = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                datePickerState.selectedDateMillis?.let { viewModel.setDate(it) }
+                                showDatePicker = false
+                            }) {
+                                Text("OK", color = AccentPrimary)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDatePicker = false }) {
+                                Text("Cancel", color = TextSecondary)
+                            }
+                        },
+                        colors = DatePickerDefaults.colors(containerColor = DarkSurface)
+                    ) {
+                        DatePicker(
+                            state = datePickerState,
+                            colors = DatePickerDefaults.colors(
+                                containerColor = DarkSurface,
+                                titleContentColor = TextPrimary,
+                                headlineContentColor = TextPrimary,
+                                selectedDayContainerColor = AccentPrimary,
+                                selectedDayContentColor = DarkBackground,
+                                todayDateBorderColor = AccentPrimary,
+                                todayContentColor = AccentPrimary
+                            )
+                        )
+                    }
+                }
 
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),

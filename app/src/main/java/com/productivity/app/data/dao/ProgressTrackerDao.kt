@@ -30,4 +30,16 @@ interface ProgressTrackerDao {
 
     @Query("DELETE FROM progress_tracker WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("SELECT COUNT(*) FROM progress_tracker WHERE completed_at IS NOT NULL")
+    fun getCompletedTrackersCountFlow(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM progress_tracker WHERE completed_at IS NOT NULL AND type = :type")
+    fun getCompletedTrackersCountByTypeFlow(type: String): Flow<Int>
+
+    @Query("SELECT * FROM progress_tracker WHERE completed_at IS NOT NULL ORDER BY completed_at DESC")
+    fun getCompletedTrackersFlow(): Flow<List<ProgressTracker>>
+
+    @Query("SELECT * FROM progress_tracker WHERE completed_at IS NOT NULL AND type = :type ORDER BY completed_at DESC")
+    fun getCompletedTrackersByTypeFlow(type: String): Flow<List<ProgressTracker>>
 }

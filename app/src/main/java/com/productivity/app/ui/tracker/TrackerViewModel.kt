@@ -9,6 +9,9 @@ import com.productivity.app.domain.tracker.AddProgressUnitUseCase
 import com.productivity.app.domain.tracker.CompleteProgressUnitUseCase
 import com.productivity.app.domain.tracker.CreateTrackerUseCase
 import com.productivity.app.domain.tracker.DeleteTrackerUseCase
+import com.productivity.app.data.model.WeeklyGoal
+import com.productivity.app.data.repository.WeeklyGoalRepository
+import com.productivity.app.domain.tracker.CreateTrackerWithModulesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -19,7 +22,9 @@ import javax.inject.Inject
 @HiltViewModel
 class TrackerViewModel @Inject constructor(
     private val trackerRepository: TrackerRepository,
+    private val weeklyGoalRepository: WeeklyGoalRepository,
     private val createTrackerUseCase: CreateTrackerUseCase,
+    private val createTrackerWithModulesUseCase: CreateTrackerWithModulesUseCase,
     private val addProgressUnitUseCase: AddProgressUnitUseCase,
     private val completeProgressUnitUseCase: CompleteProgressUnitUseCase,
     private val deleteTrackerUseCase: DeleteTrackerUseCase
@@ -49,6 +54,43 @@ class TrackerViewModel @Inject constructor(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val weeklyGoal: StateFlow<WeeklyGoal?> = _selectedTracker.flatMapLatest { tracker ->
+        if (tracker != null) {
+            val weekStart = getStartOfWeekMillis()
+            weeklyGoalRepository.getGoalForTrackerAndWeek(tracker.id, weekStart)
+        } else {
+            flowOf(null)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val completionDatesMap: StateFlow<Map<java.time.LocalDate, Int>> = _selectedTracker.flatMapLatest { tracker ->
+        if (tracker != null) {
+            trackerRepository.getUnitsForTracker(tracker.id).map { units ->
+                units.filter { it.isCompleted && it.completedAt != null }
+                    .groupBy {
+                        java.time.Instant.ofEpochMilli(it.completedAt!!)
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toLocalDate()
+                    }
+                    .mapValues { it.value.size }
+            }
+        } else {
+            flowOf(emptyMap())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    private fun getStartOfWeekMillis(): Long {
+        val cal = java.util.Calendar.getInstance().apply {
+            firstDayOfWeek = java.util.Calendar.MONDAY
+            set(java.util.Calendar.DAY_OF_WEEK, java.util.Calendar.MONDAY)
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        return cal.timeInMillis
+    }
+
     /** Loading state */
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -77,6 +119,33 @@ class TrackerViewModel @Inject constructor(
                 _uiEvent.emit(TrackerUiEvent.TrackerCreated)
             } catch (e: Exception) {
                 _uiEvent.emit(TrackerUiEvent.Error("Failed to create tracker: ${e.message}"))
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Creates a new course tracker with pre-defined modules.
+     */
+    fun createTrackerWithModules(
+        title: String,
+        type: String,
+        description: String? = null,
+        modules: List<String>
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                createTrackerWithModulesUseCase(
+                    title = title,
+                    description = description?.takeIf { it.isNotBlank() },
+                    type = type,
+                    modules = modules.filter { it.isNotBlank() }
+                )
+                _uiEvent.emit(TrackerUiEvent.TrackerCreated)
+            } catch (e: Exception) {
+                _uiEvent.emit(TrackerUiEvent.Error("Failed to create course tracker: ${e.message}"))
             } finally {
                 _isLoading.value = false
             }
@@ -132,6 +201,17 @@ class TrackerViewModel @Inject constructor(
                 // Refresh the tracker to get updated counts
                 _selectedTracker.value?.let { tracker ->
                     _selectedTracker.value = trackerRepository.getTrackerById(tracker.id)
+                    
+                    // Update weekly goal achieved count
+                    val weekStart = getStartOfWeekMillis()
+                    val goal = weeklyGoalRepository.getGoalForTrackerAndWeekSync(tracker.id, weekStart)
+                    if (goal != null) {
+                        val units = trackerRepository.getUnitsForTracker(tracker.id).first()
+                        val thisWeekCompleted = units.count { 
+                            it.isCompleted && it.completedAt != null && it.completedAt >= weekStart
+                        }
+                        weeklyGoalRepository.updateGoal(goal.copy(achievedCount = thisWeekCompleted))
+                    }
                 }
                 if (allDone) {
                     _uiEvent.emit(TrackerUiEvent.TrackerCompleted)
@@ -140,6 +220,37 @@ class TrackerViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 _uiEvent.emit(TrackerUiEvent.Error("Failed to complete unit: ${e.message}"))
+            }
+        }
+    }
+
+    /**
+     * Sets or updates the weekly goal target.
+     */
+    fun setWeeklyGoal(targetCount: Int) {
+        val tracker = _selectedTracker.value ?: return
+        viewModelScope.launch {
+            try {
+                val weekStart = getStartOfWeekMillis()
+                val units = trackerRepository.getUnitsForTracker(tracker.id).first()
+                val thisWeekCompleted = units.count { 
+                    it.isCompleted && it.completedAt != null && it.completedAt >= weekStart
+                }
+                val existing = weeklyGoalRepository.getGoalForTrackerAndWeekSync(tracker.id, weekStart)
+                if (existing != null) {
+                    weeklyGoalRepository.updateGoal(existing.copy(targetCount = targetCount, achievedCount = thisWeekCompleted))
+                } else {
+                    weeklyGoalRepository.insertGoal(
+                        WeeklyGoal(
+                            trackerId = tracker.id,
+                            targetCount = targetCount,
+                            weekStartDate = weekStart,
+                            achievedCount = thisWeekCompleted
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                _uiEvent.emit(TrackerUiEvent.Error("Failed to set weekly goal: ${e.message}"))
             }
         }
     }

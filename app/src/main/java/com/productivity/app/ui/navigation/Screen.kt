@@ -137,8 +137,32 @@ sealed class Screen(
         unselectedIcon = Icons.Outlined.Settings
     )
 
+    data object Statistics : Screen(
+        route = "statistics",
+        title = "Stats",
+        selectedIcon = Icons.Filled.BarChart,
+        unselectedIcon = Icons.Outlined.BarChart
+    )
+
+    data object PersonalManager : Screen(
+        route = "personal_manager",
+        title = "Personal Manager",
+        selectedIcon = Icons.Filled.Person,
+        unselectedIcon = Icons.Outlined.Person
+    )
+
+    data object AlarmActive : Screen(
+        route = "alarm_active?reminderId={reminderId}&eventId={eventId}",
+        title = "Active Alarm",
+        selectedIcon = Icons.Filled.Alarm,
+        unselectedIcon = Icons.Outlined.Alarm
+    ) {
+        fun createRoute(reminderId: Long?, eventId: Long?) =
+            "alarm_active?reminderId=${reminderId ?: -1L}&eventId=${eventId ?: -1L}"
+    }
+
     companion object {
         /** Items displayed in the bottom navigation bar */
-        val bottomNavItems = listOf(Dashboard, Reminders, Schedule, Trackers, Notes)
+        val bottomNavItems = listOf(Dashboard, Reminders, Schedule, Trackers, Statistics, Notes)
     }
 }

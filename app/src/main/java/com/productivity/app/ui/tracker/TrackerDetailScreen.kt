@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.productivity.app.data.model.ProgressUnit
+import com.productivity.app.data.model.WeeklyGoal
 import com.productivity.app.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -38,6 +39,8 @@ fun TrackerDetailScreen(
     val tracker by viewModel.selectedTracker.collectAsStateWithLifecycle()
     val units by viewModel.selectedTrackerUnits.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val weeklyGoal by viewModel.weeklyGoal.collectAsStateWithLifecycle()
+    val completionDates by viewModel.completionDatesMap.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showAddUnit by remember { mutableStateOf(false) }
@@ -225,6 +228,20 @@ fun TrackerDetailScreen(
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    WeeklyGoalCard(
+                        weeklyGoal = weeklyGoal,
+                        onSetGoal = { viewModel.setWeeklyGoal(it) }
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    ConsistencyGrid(
+                        completionDates = completionDates,
+                        typeColor = typeColor
+                    )
 
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -505,5 +522,228 @@ private fun UnitItem(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun ConsistencyGrid(
+    completionDates: Map<java.time.LocalDate, Int>,
+    typeColor: Color
+) {
+    val today = java.time.LocalDate.now()
+    val completedDates = completionDates.keys
+    val minDate = completedDates.minOrNull() ?: today
+    
+    // Find the Monday of the starting week
+    val minDateWeekStart = minDate.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+    val todayWeekStart = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+    
+    val weeksBetween = java.time.temporal.ChronoUnit.WEEKS.between(minDateWeekStart, todayWeekStart).toInt()
+    val totalWeeksToShow = maxOf(12, weeksBetween + 1) // minimum of 12 weeks, grows dynamically!
+    
+    val startOfWeek = todayWeekStart.minusWeeks((totalWeeksToShow - 1).toLong())
+    
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Consistency History",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = TextPrimary
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Grid container (horizontal scrollable)
+            androidx.compose.foundation.lazy.LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(totalWeeksToShow) { weekIndex ->
+                    val weekMonday = startOfWeek.plusWeeks(weekIndex.toLong())
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        for (dayOffset in 0..6) {
+                            val date = weekMonday.plusDays(dayOffset.toLong())
+                            val completedCount = completionDates[date] ?: 0
+                            val cellColor = when {
+                                date.isAfter(today) -> DarkSurfaceVariant.copy(alpha = 0.2f) // Future date
+                                completedCount == 0 -> DarkSurfaceVariant // No completion
+                                completedCount == 1 -> typeColor.copy(alpha = 0.4f)
+                                completedCount == 2 -> typeColor.copy(alpha = 0.7f)
+                                else -> typeColor // 3+ completions
+                            }
+                            
+                            Box(
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(cellColor)
+                            )
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Legend
+            Row(
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Less ", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(DarkSurfaceVariant))
+                Spacer(modifier = Modifier.width(4.dp))
+                Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(typeColor.copy(alpha = 0.4f)))
+                Spacer(modifier = Modifier.width(4.dp))
+                Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(typeColor.copy(alpha = 0.7f)))
+                Spacer(modifier = Modifier.width(4.dp))
+                Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(typeColor))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(" More", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+            }
+        }
+    }
+}
+
+@Composable
+fun WeeklyGoalCard(
+    weeklyGoal: WeeklyGoal?,
+    onSetGoal: (Int) -> Unit
+) {
+    var showDialog by remember { mutableStateOf(false) }
+    var targetInput by remember { mutableStateOf("") }
+    
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Flag,
+                    contentDescription = null,
+                    tint = AccentPrimary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Weekly Goal",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { 
+                    targetInput = weeklyGoal?.targetCount?.toString() ?: ""
+                    showDialog = true 
+                }) {
+                    Text(if (weeklyGoal == null) "Set Target" else "Edit Target")
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            if (weeklyGoal != null) {
+                val achieved = weeklyGoal.achievedCount
+                val target = weeklyGoal.targetCount
+                val goalProgress = if (target > 0) achieved.toFloat() / target.toFloat() else 0f
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Achieved $achieved of $target units this week",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { goalProgress.coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = AccentPrimary,
+                            trackColor = DarkSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    if (achieved >= target && target > 0) {
+                        Text(
+                            text = "🎯 Done!",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = SuccessGreen
+                        )
+                    } else {
+                        Text(
+                            text = "${(goalProgress * 100).toInt()}%",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = AccentPrimary
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = "No goal set for this week. Stay consistent by setting a completion target!",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextTertiary
+                )
+            }
+        }
+    }
+    
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("Set Weekly Target", color = TextPrimary) },
+            text = {
+                Column {
+                    Text("Enter the number of units you want to complete this week:", color = TextSecondary)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = targetInput,
+                        onValueChange = { targetInput = it },
+                        placeholder = { Text("e.g. 5") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPrimary,
+                            unfocusedBorderColor = DarkSurfaceVariant,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val count = targetInput.toIntOrNull()
+                    if (count != null && count > 0) {
+                        onSetGoal(count)
+                        showDialog = false
+                    }
+                }) {
+                    Text("Save", color = AccentPrimary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            },
+            containerColor = DarkSurface
+        )
     }
 }

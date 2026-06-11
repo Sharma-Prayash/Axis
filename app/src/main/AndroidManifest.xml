@@ -26,6 +26,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.ProductivityApp">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -47,6 +48,12 @@
         <!-- Alarm Receiver — fires notification when scheduled alarm triggers -->
         <receiver
             android:name=".service.AlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- Morning Digest Receiver — fires morning status/targets digest -->
+        <receiver
+            android:name=".service.MorningDigestReceiver"
             android:enabled="true"
             android:exported="false" />
 

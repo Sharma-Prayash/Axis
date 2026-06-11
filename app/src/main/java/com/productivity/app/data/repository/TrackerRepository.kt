@@ -27,6 +27,13 @@ interface TrackerRepository {
     suspend fun insertUnit(unit: ProgressUnit): Long
     suspend fun updateUnit(unit: ProgressUnit)
     suspend fun deleteUnit(unit: ProgressUnit)
+
+    fun getCompletedTrackersCount(): Flow<Int>
+    fun getCompletedTrackersCountByType(type: String): Flow<Int>
+    fun getCompletedTrackers(): Flow<List<ProgressTracker>>
+    fun getCompletedTrackersByType(type: String): Flow<List<ProgressTracker>>
+    suspend fun insertUnits(units: List<ProgressUnit>)
+    fun getCompletedUnitsForTrackerInDateRange(trackerId: Long, startMs: Long, endMs: Long): Flow<List<ProgressUnit>>
 }
 
 @Singleton
@@ -50,4 +57,12 @@ class TrackerRepositoryImpl @Inject constructor(
     override suspend fun insertUnit(unit: ProgressUnit) = unitDao.insert(unit)
     override suspend fun updateUnit(unit: ProgressUnit) = unitDao.update(unit)
     override suspend fun deleteUnit(unit: ProgressUnit) = unitDao.delete(unit)
+
+    override fun getCompletedTrackersCount() = trackerDao.getCompletedTrackersCountFlow()
+    override fun getCompletedTrackersCountByType(type: String) = trackerDao.getCompletedTrackersCountByTypeFlow(type)
+    override fun getCompletedTrackers() = trackerDao.getCompletedTrackersFlow()
+    override fun getCompletedTrackersByType(type: String) = trackerDao.getCompletedTrackersByTypeFlow(type)
+    override suspend fun insertUnits(units: List<ProgressUnit>) = unitDao.insertAll(units)
+    override fun getCompletedUnitsForTrackerInDateRange(trackerId: Long, startMs: Long, endMs: Long) =
+        unitDao.getCompletedUnitsForTrackerInDateRange(trackerId, startMs, endMs)
 }

@@ -14,9 +14,10 @@ import com.productivity.app.data.model.*
         ProgressUnit::class,
         Checklist::class,
         ChecklistItem::class,
-        NoteLog::class
+        NoteLog::class,
+        WeeklyGoal::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -27,6 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun checklistDao(): ChecklistDao
     abstract fun checklistItemDao(): ChecklistItemDao
     abstract fun noteLogDao(): NoteLogDao
+    abstract fun weeklyGoalDao(): WeeklyGoalDao
 
     companion object {
         @Volatile
@@ -42,7 +44,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "productivity_database"
-                ).build().also { workerInstance = it }
+                )
+                .fallbackToDestructiveMigration()
+                .build().also { workerInstance = it }
             }
         }
     }

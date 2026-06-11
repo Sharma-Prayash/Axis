@@ -36,7 +36,8 @@ fun DashboardScreen(
     onNavigateToTrackers: () -> Unit = {},
     onNavigateToReminderDetail: (Long) -> Unit = {},
     onNavigateToEventDetail: (Long) -> Unit = {},
-    onNavigateToTrackerDetail: (Long) -> Unit = {}
+    onNavigateToTrackerDetail: (Long) -> Unit = {},
+    onNavigateToPersonalManager: () -> Unit = {}
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val greeting = remember { viewModel.getGreeting() }
@@ -63,18 +64,40 @@ fun DashboardScreen(
         Spacer(modifier = Modifier.height(20.dp))
 
         // ── Greeting Header ─────────────────────────────────────
-        Text(
-            text = greeting,
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            color = TextPrimary
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = todayFormatted,
-            style = MaterialTheme.typography.bodyLarge,
-            color = TextSecondary
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = greeting,
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = todayFormatted,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = TextSecondary
+                )
+            }
+            IconButton(
+                onClick = onNavigateToPersonalManager,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DarkSurface),
+                colors = IconButtonDefaults.iconButtonColors(contentColor = AccentPrimary)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Person,
+                    contentDescription = "Personal Manager",
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 

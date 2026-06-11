@@ -169,4 +169,66 @@ class AlarmManagerHelper @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
+
+    /**
+     * Schedules a daily digest alarm.
+     */
+    fun scheduleDailyDigest(hour: Int, minute: Int) {
+        val calendar = java.util.Calendar.getInstance().apply {
+            timeInMillis = System.currentTimeMillis()
+            set(java.util.Calendar.HOUR_OF_DAY, hour)
+            set(java.util.Calendar.MINUTE, minute)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+            
+            if (timeInMillis <= System.currentTimeMillis()) {
+                add(java.util.Calendar.DAY_OF_YEAR, 1)
+            }
+        }
+        
+        val pendingIntent = buildDigestPendingIntent()
+        val triggerAtMillis = calendar.timeInMillis
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (alarmManager.canScheduleExactAlarms()) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+                Log.d(TAG, "Scheduled exact daily digest alarm at $triggerAtMillis")
+            } else {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+                Log.w(TAG, "Exact alarm permission denied — using inexact for daily digest")
+            }
+        } else {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                pendingIntent
+            )
+            Log.d(TAG, "Scheduled exact daily digest alarm at $triggerAtMillis")
+        }
+    }
+    
+    fun cancelDailyDigest() {
+        val pendingIntent = buildDigestPendingIntent()
+        alarmManager.cancel(pendingIntent)
+        pendingIntent.cancel()
+        Log.d(TAG, "Cancelled daily digest alarm")
+    }
+    
+    private fun buildDigestPendingIntent(): PendingIntent {
+        val intent = Intent(context, MorningDigestReceiver::class.java)
+        return PendingIntent.getBroadcast(
+            context,
+            999999,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
 }

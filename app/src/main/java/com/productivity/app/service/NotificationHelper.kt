@@ -43,6 +43,7 @@ class NotificationHelper @Inject constructor(
         const val CHANNEL_DEADLINE = "channel_deadline_v2"
         const val CHANNEL_TRAVEL = "channel_travel_v2"
         const val CHANNEL_GENERAL = "channel_general_v2"
+        const val CHANNEL_MORNING_DIGEST = "channel_morning_digest_v2"
 
         // Snooze duration options (milliseconds)
         val SNOOZE_OPTIONS_MINUTES = listOf(5, 10, 15, 30)
@@ -113,6 +114,14 @@ class NotificationHelper @Inject constructor(
                 description = "General purpose reminders"
                 setSound(null, null)
                 enableVibration(false)
+            },
+
+            NotificationChannel(
+                CHANNEL_MORNING_DIGEST,
+                "Daily Morning Digest",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Daily summary of your tasks, events and goals"
             }
         )
 
@@ -357,5 +366,44 @@ class NotificationHelper @Inject constructor(
             "travel" -> CHANNEL_TRAVEL
             else -> CHANNEL_GENERAL
         }
+    }
+
+    fun showMorningDigestNotification(summary: String) {
+        val notificationId = 999999
+        val contentIntent = Intent(context, MainActivity::class.java).apply {
+            putExtra("extra_open_personal_manager", true)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val contentPendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            contentIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_MORNING_DIGEST)
+            .setSmallIcon(android.R.drawable.ic_menu_today)
+            .setContentTitle("☀️ Morning Digest")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(summary))
+            .setContentText(summary.substringBefore("\n"))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(contentPendingIntent)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.w(TAG, "POST_NOTIFICATIONS permission not granted — skipping notification")
+                return
+            }
+        }
+
+        NotificationManagerCompat.from(context).notify(notificationId, notification)
+        Log.d(TAG, "Posted daily digest notification")
     }
 }
