@@ -33,12 +33,8 @@ class FocusViewModel @Inject constructor(
 
     private val _selectedTaskId = MutableStateFlow<Long?>(null)
     
-    val selectedTask: StateFlow<FocusTask?> = _selectedTaskId.flatMapLatest { id ->
-        if (id != null) {
-            flow { emit(repository.getTaskById(id)) }
-        } else {
-            flowOf<FocusTask?>(null)
-        }
+    val selectedTask: StateFlow<FocusTask?> = combine(tasks, _selectedTaskId) { list, id ->
+        list.find { it.id == id }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val selectedTaskLogs: StateFlow<List<FocusLog>> = _selectedTaskId.flatMapLatest { id ->
@@ -84,6 +80,34 @@ class FocusViewModel @Inject constructor(
                 gradualMinutesIncrement = gradualIncrement
             )
             repository.insertTask(task)
+        }
+    }
+
+    fun updateTask(
+        id: Long,
+        title: String,
+        description: String?,
+        dailyTargetMinutes: Int,
+        workMinutes: Int,
+        breakMinutes: Int,
+        enableGradualScaling: Boolean,
+        gradualIncrement: Int
+    ) {
+        viewModelScope.launch {
+            val existing = repository.getTaskById(id)
+            val createdAt = existing?.createdAt ?: System.currentTimeMillis()
+            val updatedTask = FocusTask(
+                id = id,
+                title = title,
+                description = description,
+                dailyTargetMinutes = dailyTargetMinutes,
+                workDurationMinutes = workMinutes,
+                breakDurationMinutes = breakMinutes,
+                enableGradualScaling = enableGradualScaling,
+                gradualMinutesIncrement = gradualIncrement,
+                createdAt = createdAt
+            )
+            repository.updateTask(updatedTask)
         }
     }
 

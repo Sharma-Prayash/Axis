@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,7 +32,8 @@ import com.productivity.app.ui.theme.*
 fun TrackerListScreen(
     viewModel: TrackerViewModel = hiltViewModel(),
     onNavigateToCreate: () -> Unit = {},
-    onNavigateToDetail: (Long) -> Unit = {}
+    onNavigateToDetail: (Long) -> Unit = {},
+    onOpenDrawer: () -> Unit = {}
 ) {
     val allTrackers by viewModel.allTrackers.collectAsStateWithLifecycle()
     var selectedFilter by remember { mutableStateOf("all") }
@@ -65,13 +67,27 @@ fun TrackerListScreen(
             // ── Header ───────────────────────────────────────
             item {
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Trackers",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    modifier = Modifier.padding(horizontal = 20.dp)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                ) {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Open Drawer",
+                            tint = TextPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Trackers",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Filter chips

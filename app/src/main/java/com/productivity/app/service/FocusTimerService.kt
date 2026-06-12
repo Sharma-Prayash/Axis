@@ -4,7 +4,9 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.media.RingtoneManager
+import android.media.ToneGenerator
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -55,7 +57,9 @@ class FocusTimerService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var tickerJob: Job? = null
+    private var beepJob: Job? = null
     private var activeSecondsAccumulator = 0
+    private var activeTaskObserverJob: Job? = null
 
     inner class LocalBinder : Binder() {
         fun getService(): FocusTimerService = this@FocusTimerService
@@ -64,6 +68,7 @@ class FocusTimerService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        restoreStateFromPrefs()
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -82,20 +87,38 @@ class FocusTimerService : Service() {
     }
 
     fun startSession(task: FocusTask) {
+        stopBeep()
         _currentTask.value = task
-        _completedCycles.value = 0
+        startObservingActiveTask(task.id)
+        
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val sharedPrefs = getSharedPreferences("focus_timer_prefs", Context.MODE_PRIVATE)
+        val lastActiveDate = sharedPrefs.getString("last_active_date", "")
+        val savedCompletedCycles = if (lastActiveDate == today) {
+            sharedPrefs.getInt("completed_cycles_${task.id}", 0)
+        } else {
+            0
+        }
+        _completedCycles.value = savedCompletedCycles
         activeSecondsAccumulator = 0
 
-        val workSeconds = task.workDurationMinutes * 60
+        val baseWorkMinutes = task.workDurationMinutes
+        val workSeconds = if (task.enableGradualScaling) {
+            (baseWorkMinutes + (savedCompletedCycles * task.gradualMinutesIncrement)) * 60
+        } else {
+            baseWorkMinutes * 60
+        }
         _maxSeconds.value = workSeconds
         _secondsRemaining.value = workSeconds
         _timerState.value = TimerState.WORK_TICKING
 
         startForegroundNotification()
         startTicker()
+        saveStateToPrefs()
     }
 
     fun pauseSession() {
+        stopBeep()
         val currentState = _timerState.value
         if (currentState == TimerState.WORK_TICKING) {
             _timerState.value = TimerState.WORK_PAUSED
@@ -110,9 +133,11 @@ class FocusTimerService : Service() {
             activeSecondsAccumulator = 0
         }
         updateNotification()
+        saveStateToPrefs()
     }
 
     fun resumeSession() {
+        stopBeep()
         val currentState = _timerState.value
         if (currentState == TimerState.WORK_PAUSED) {
             _timerState.value = TimerState.WORK_TICKING
@@ -122,9 +147,13 @@ class FocusTimerService : Service() {
             startTicker()
         }
         updateNotification()
+        saveStateToPrefs()
     }
 
     fun stopSession() {
+        stopBeep()
+        activeTaskObserverJob?.cancel()
+        activeTaskObserverJob = null
         // Save outstanding progress
         if (_timerState.value == TimerState.WORK_TICKING && activeSecondsAccumulator >= 10) {
             saveProgress(1)
@@ -138,8 +167,21 @@ class FocusTimerService : Service() {
         _completedCycles.value = 0
         activeSecondsAccumulator = 0
 
+        saveStateToPrefs()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun startObservingActiveTask(taskId: Long) {
+        activeTaskObserverJob?.cancel()
+        activeTaskObserverJob = serviceScope.launch {
+            repository.getAllTasks().collect { tasks ->
+                val updated = tasks.find { it.id == taskId }
+                if (updated != null) {
+                    updateActiveTask(updated)
+                }
+            }
+        }
     }
 
     private fun startTicker() {
@@ -173,6 +215,7 @@ class FocusTimerService : Service() {
             // but keep time updated.
             if (nextSeconds % 5 == 0 || nextSeconds <= 10) {
                 updateNotification()
+                saveStateToPrefs()
             }
         }
     }
@@ -181,9 +224,8 @@ class FocusTimerService : Service() {
         val state = _timerState.value
         val task = _currentTask.value ?: return
 
-        playTransitionSound()
-
         if (state == TimerState.WORK_TICKING) {
+            playTransitionSound(isToBreak = true)
             // Completed a work cycle!
             val newCycleCount = _completedCycles.value + 1
             _completedCycles.value = newCycleCount
@@ -206,6 +248,7 @@ class FocusTimerService : Service() {
             
             Log.d(TAG, "Work cycle completed. Transitioning to Break: $breakSeconds seconds.")
         } else if (state == TimerState.BREAK_TICKING) {
+            playTransitionSound(isToBreak = false)
             // Completed a break!
             _timerState.value = TimerState.WORK_TICKING
 
@@ -227,6 +270,7 @@ class FocusTimerService : Service() {
         }
 
         updateNotification()
+        saveStateToPrefs()
     }
 
     private fun saveProgress(minutes: Int) {
@@ -242,13 +286,134 @@ class FocusTimerService : Service() {
         }
     }
 
-    private fun playTransitionSound() {
-        try {
-            val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val ringtone = RingtoneManager.getRingtone(applicationContext, notificationUri)
-            ringtone.play()
+    private fun playTransitionSound(isToBreak: Boolean) {
+        stopBeep()
+        beepJob = serviceScope.launch(Dispatchers.IO) {
+            val volume = if (isToBreak) 30 else 100
+            val toneType = if (isToBreak) {
+                ToneGenerator.TONE_CDMA_PIP
+            } else {
+                ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD
+            }
+            val toneDurationMs = if (isToBreak) 300 else 600
+            val intervalMs = if (isToBreak) 1500L else 1000L
+            val totalDurationMs = 10000L
+            val startTime = System.currentTimeMillis()
+            
+            var toneGen: ToneGenerator? = null
+            try {
+                toneGen = ToneGenerator(AudioManager.STREAM_ALARM, volume)
+                while (isActive && (System.currentTimeMillis() - startTime) < totalDurationMs) {
+                    toneGen.startTone(toneType, toneDurationMs)
+                    delay(intervalMs)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to play transition sound", e)
+            } finally {
+                toneGen?.release()
+            }
+        }
+    }
+
+    private fun stopBeep() {
+        beepJob?.cancel()
+        beepJob = null
+    }
+
+    private fun saveStateToPrefs() {
+        val task = _currentTask.value
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val sharedPrefs = getSharedPreferences("focus_timer_prefs", Context.MODE_PRIVATE)
+        sharedPrefs.edit().apply {
+            putString("last_active_date", today)
+            putLong("active_task_id", task?.id ?: -1L)
+            putString("timer_state", _timerState.value.name)
+            putInt("seconds_remaining", _secondsRemaining.value)
+            putInt("max_seconds", _maxSeconds.value)
+            putInt("active_seconds_accumulator", activeSecondsAccumulator)
+            putLong("last_updated_timestamp", System.currentTimeMillis())
+            if (task != null) {
+                putInt("completed_cycles_${task.id}", _completedCycles.value)
+            }
+            apply()
+        }
+    }
+
+    private fun restoreStateFromPrefs() {
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val sharedPrefs = getSharedPreferences("focus_timer_prefs", Context.MODE_PRIVATE)
+        val lastActiveDate = sharedPrefs.getString("last_active_date", "")
+
+        if (lastActiveDate != today) {
+            sharedPrefs.edit().clear().apply()
+            return
+        }
+
+        val activeTaskId = sharedPrefs.getLong("active_task_id", -1L)
+        if (activeTaskId == -1L) return
+
+        val savedStateStr = sharedPrefs.getString("timer_state", TimerState.IDLE.name) ?: TimerState.IDLE.name
+        val savedState = try {
+            TimerState.valueOf(savedStateStr)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to play transition sound", e)
+            TimerState.IDLE
+        }
+
+        if (savedState == TimerState.IDLE) return
+
+        val savedSecondsRemaining = sharedPrefs.getInt("seconds_remaining", 0)
+        val savedMaxSeconds = sharedPrefs.getInt("max_seconds", 0)
+        val savedAccumulator = sharedPrefs.getInt("active_seconds_accumulator", 0)
+        val savedLastUpdated = sharedPrefs.getLong("last_updated_timestamp", 0L)
+        val savedCompletedCycles = sharedPrefs.getInt("completed_cycles_$activeTaskId", 0)
+
+        serviceScope.launch {
+            try {
+                val task = repository.getTaskById(activeTaskId)
+                if (task != null) {
+                    _currentTask.value = task
+                    startObservingActiveTask(activeTaskId)
+                    _completedCycles.value = savedCompletedCycles
+                    activeSecondsAccumulator = savedAccumulator
+                    _maxSeconds.value = savedMaxSeconds
+
+                    val elapsedSeconds = if (savedState == TimerState.WORK_TICKING || savedState == TimerState.BREAK_TICKING) {
+                        if (savedLastUpdated > 0L) {
+                            (System.currentTimeMillis() - savedLastUpdated) / 1000L
+                        } else 0L
+                    } else 0L
+
+                    val remaining = savedSecondsRemaining - elapsedSeconds
+                    if (remaining > 0L) {
+                        _secondsRemaining.value = remaining.toInt()
+                        _timerState.value = savedState
+                        startTicker()
+                        startForegroundNotification()
+                    } else {
+                        _secondsRemaining.value = 0
+                        _timerState.value = if (savedState == TimerState.WORK_TICKING) {
+                            TimerState.BREAK_PAUSED
+                        } else {
+                            TimerState.WORK_PAUSED
+                        }
+                        startForegroundNotification()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error restoring timer state", e)
+            }
+        }
+    }
+
+    fun updateActiveTask(updatedTask: FocusTask) {
+        if (_currentTask.value?.id == updatedTask.id) {
+            _currentTask.value = updatedTask
+            if (_timerState.value == TimerState.IDLE) {
+                val workSeconds = updatedTask.workDurationMinutes * 60
+                _maxSeconds.value = workSeconds
+                _secondsRemaining.value = workSeconds
+            }
+            saveStateToPrefs()
         }
     }
 
@@ -361,6 +526,7 @@ class FocusTimerService : Service() {
 
     override fun onDestroy() {
         tickerJob?.cancel()
+        stopBeep()
         serviceScope.cancel()
         super.onDestroy()
     }

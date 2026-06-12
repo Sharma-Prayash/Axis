@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,7 +36,8 @@ fun ReminderListScreen(
     viewModel: ReminderViewModel = hiltViewModel(),
     onNavigateToCreate: () -> Unit = {},
     onNavigateToDetail: (Long) -> Unit = {},
-    onNavigateToSettings: () -> Unit = {}
+    onNavigateToSettings: () -> Unit = {},
+    onOpenDrawer: () -> Unit = {}
 ) {
     val reminders by viewModel.activeReminders.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
@@ -81,9 +83,17 @@ fun ReminderListScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 8.dp, top = 16.dp),
+                    .padding(start = 8.dp, end = 8.dp, top = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                IconButton(onClick = onOpenDrawer) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Open Drawer",
+                        tint = TextPrimary
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Reminders",
                     style = MaterialTheme.typography.headlineLarge,
@@ -103,7 +113,7 @@ fun ReminderListScreen(
                 text = "${reminders.size} active",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
-                modifier = Modifier.padding(start = 20.dp, bottom = 16.dp)
+                modifier = Modifier.padding(start = 52.dp, bottom = 16.dp)
             )
 
             if (isLoading) {

@@ -11,6 +11,7 @@ interface FocusRepository {
     fun getAllTasks(): Flow<List<FocusTask>>
     suspend fun getTaskById(id: Long): FocusTask?
     suspend fun insertTask(task: FocusTask): Long
+    suspend fun updateTask(task: FocusTask)
     suspend fun deleteTask(task: FocusTask)
     fun getLogsForTask(taskId: Long): Flow<List<FocusLog>>
     fun getLogsForDate(date: String): Flow<List<FocusLog>>
@@ -30,6 +31,9 @@ class FocusRepositoryImpl @Inject constructor(
 
     override suspend fun insertTask(task: FocusTask): Long =
         focusDao.insertTask(task)
+
+    override suspend fun updateTask(task: FocusTask) =
+        focusDao.updateTask(task)
 
     override suspend fun deleteTask(task: FocusTask) =
         focusDao.deleteTask(task)

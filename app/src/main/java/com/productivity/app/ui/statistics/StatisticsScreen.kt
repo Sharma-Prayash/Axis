@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,7 +28,8 @@ import java.util.*
 @Composable
 fun StatisticsScreen(
     viewModel: StatisticsViewModel = hiltViewModel(),
-    onNavigateToTrackerDetail: (Long) -> Unit = {}
+    onNavigateToTrackerDetail: (Long) -> Unit = {},
+    onOpenDrawer: () -> Unit = {}
 ) {
     val completedCourses by viewModel.completedCoursesCount.collectAsStateWithLifecycle()
     val completedProjects by viewModel.completedProjectsCount.collectAsStateWithLifecycle()
@@ -47,9 +49,18 @@ fun StatisticsScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Performance Statistics", fontWeight = FontWeight.SemiBold) },
+                navigationIcon = {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Open Drawer"
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = DarkBackground,
-                    titleContentColor = TextPrimary
+                    titleContentColor = TextPrimary,
+                    navigationIconContentColor = TextPrimary
                 )
             )
         },

@@ -21,9 +21,13 @@ import android.os.Build
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import android.content.Intent
+import androidx.compose.ui.unit.dp
 import com.productivity.app.service.AlarmManagerHelper
 import com.productivity.app.service.NotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.Color
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -111,6 +115,8 @@ fun MainScreen(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(alarmReminderId, alarmEventId, openPersonalManager) {
         if (alarmReminderId != null || alarmEventId != null) {
@@ -126,36 +132,46 @@ fun MainScreen(
         }
     }
 
-    // Only show bottom bar on top-level destinations
-    val showBottomBar = Screen.bottomNavItems.any { screen ->
+    val showDrawer = Screen.bottomNavItems.any { screen ->
         currentDestination?.hierarchy?.any { it.route == screen.route } == true
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            if (showBottomBar) {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
+    if (showDrawer) {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet(
+                    drawerContainerColor = com.productivity.app.ui.theme.DarkSurface,
+                    drawerContentColor = com.productivity.app.ui.theme.TextPrimary
                 ) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "Axis Manager",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = com.productivity.app.ui.theme.AccentPrimary,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+                    )
+                    HorizontalDivider(
+                        color = com.productivity.app.ui.theme.DarkSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
                     Screen.bottomNavItems.forEach { screen ->
                         val selected = currentDestination?.hierarchy?.any {
                             it.route == screen.route
                         } == true
 
-                        NavigationBarItem(
+                        NavigationDrawerItem(
                             icon = {
                                 Icon(
-                                    imageVector = if (selected) screen.selectedIcon
-                                                  else screen.unselectedIcon,
+                                    imageVector = if (selected) screen.selectedIcon else screen.unselectedIcon,
                                     contentDescription = screen.title
                                 )
                             },
-                            label = { Text(screen.title) },
+                            label = { Text(screen.title, fontWeight = FontWeight.SemiBold) },
                             selected = selected,
                             onClick = {
+                                scope.launch { drawerState.close() }
                                 navController.navigate(screen.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
@@ -164,21 +180,43 @@ fun MainScreen(
                                     restoreState = true
                                 }
                             },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                            )
+                            colors = NavigationDrawerItemDefaults.colors(
+                                selectedContainerColor = com.productivity.app.ui.theme.AccentPrimary.copy(alpha = 0.15f),
+                                selectedIconColor = com.productivity.app.ui.theme.AccentPrimary,
+                                selectedTextColor = com.productivity.app.ui.theme.AccentPrimary,
+                                unselectedContainerColor = Color.Transparent,
+                                unselectedIconColor = com.productivity.app.ui.theme.TextSecondary,
+                                unselectedTextColor = com.productivity.app.ui.theme.TextSecondary
+                            ),
+                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                         )
                     }
                 }
             }
+        ) {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                containerColor = MaterialTheme.colorScheme.background
+            ) { innerPadding ->
+                Box(modifier = Modifier.padding(innerPadding)) {
+                    NavGraph(
+                        navController = navController,
+                        onOpenDrawer = { scope.launch { drawerState.open() } }
+                    )
+                }
+            }
         }
-    ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding)) {
-            NavGraph(navController = navController)
+    } else {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = MaterialTheme.colorScheme.background
+        ) { innerPadding ->
+            Box(modifier = Modifier.padding(innerPadding)) {
+                NavGraph(
+                    navController = navController,
+                    onOpenDrawer = {}
+                )
+            }
         }
     }
 }

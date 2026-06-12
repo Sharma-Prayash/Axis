@@ -29,7 +29,10 @@ import com.productivity.app.ui.focus.FocusListScreen
 import com.productivity.app.ui.focus.FocusTimerScreen
 
 @Composable
-fun NavGraph(navController: NavHostController) {
+fun NavGraph(
+    navController: NavHostController,
+    onOpenDrawer: () -> Unit
+) {
     NavHost(
         navController = navController,
         startDestination = Screen.Dashboard.route
@@ -63,7 +66,8 @@ fun NavGraph(navController: NavHostController) {
                 },
                 onNavigateToPersonalManager = {
                     navController.navigate(Screen.PersonalManager.route)
-                }
+                },
+                onOpenDrawer = onOpenDrawer
             )
         }
 
@@ -78,7 +82,8 @@ fun NavGraph(navController: NavHostController) {
                 },
                 onNavigateToSettings = {
                     navController.navigate(Screen.AlarmSettings.route)
-                }
+                },
+                onOpenDrawer = onOpenDrawer
             )
         }
         composable(Screen.CreateReminder.route) {
@@ -114,7 +119,8 @@ fun NavGraph(navController: NavHostController) {
                 },
                 onNavigateToDetail = { eventId ->
                     navController.navigate(Screen.EventDetail.createRoute(eventId))
-                }
+                },
+                onOpenDrawer = onOpenDrawer
             )
         }
         composable(Screen.CreateEvent.route) {
@@ -143,7 +149,8 @@ fun NavGraph(navController: NavHostController) {
                 },
                 onNavigateToDetail = { trackerId ->
                     navController.navigate(Screen.TrackerDetail.createRoute(trackerId))
-                }
+                },
+                onOpenDrawer = onOpenDrawer
             )
         }
         composable(Screen.CreateTracker.route) {
@@ -169,7 +176,8 @@ fun NavGraph(navController: NavHostController) {
             NoteLogListScreen(
                 onNavigateToCreate = {
                     navController.navigate(Screen.CreateNoteLog.route)
-                }
+                },
+                onOpenDrawer = onOpenDrawer
             )
         }
         composable(Screen.CreateNoteLog.route) {
@@ -210,7 +218,8 @@ fun NavGraph(navController: NavHostController) {
             StatisticsScreen(
                 onNavigateToTrackerDetail = { trackerId ->
                     navController.navigate(Screen.TrackerDetail.createRoute(trackerId))
-                }
+                },
+                onOpenDrawer = onOpenDrawer
             )
         }
 
@@ -258,7 +267,8 @@ fun NavGraph(navController: NavHostController) {
             FocusListScreen(
                 onNavigateToTimer = { taskId ->
                     navController.navigate(Screen.FocusTimer.createRoute(taskId))
-                }
+                },
+                onOpenDrawer = onOpenDrawer
             )
         }
         composable(

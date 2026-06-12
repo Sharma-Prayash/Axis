@@ -16,6 +16,9 @@ interface FocusDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: FocusTask): Long
 
+    @Update
+    suspend fun updateTask(task: FocusTask)
+
     @Delete
     suspend fun deleteTask(task: FocusTask)
 

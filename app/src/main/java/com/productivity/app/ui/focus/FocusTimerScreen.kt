@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -52,10 +53,11 @@ fun FocusTimerScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
-    
+
     // Bind to Foreground FocusTimerService
     var service by remember { mutableStateOf<FocusTimerService?>(null) }
     var isBound by remember { mutableStateOf(false) }
+    var showEditSheet by remember { mutableStateOf(false) }
 
     val connection = remember {
         object : ServiceConnection {
@@ -93,13 +95,16 @@ fun FocusTimerScreen(
     val consistencyMap by viewModel.selectedTaskConsistencyMap.collectAsStateWithLifecycle()
 
     // Collect service states reactively and safely
-    val activeTaskFlow = remember(service) { service?.currentTask ?: MutableStateFlow<FocusTask?>(null) }
+    val activeTaskFlow =
+        remember(service) { service?.currentTask ?: MutableStateFlow<FocusTask?>(null) }
     val activeTask by activeTaskFlow.collectAsStateWithLifecycle()
 
-    val timerStateFlow = remember(service) { service?.timerState ?: MutableStateFlow(TimerState.IDLE) }
+    val timerStateFlow =
+        remember(service) { service?.timerState ?: MutableStateFlow(TimerState.IDLE) }
     val timerState by timerStateFlow.collectAsStateWithLifecycle()
 
-    val secondsRemainingFlow = remember(service) { service?.secondsRemaining ?: MutableStateFlow(0) }
+    val secondsRemainingFlow =
+        remember(service) { service?.secondsRemaining ?: MutableStateFlow(0) }
     val secondsRemaining by secondsRemainingFlow.collectAsStateWithLifecycle()
 
     val maxSecondsFlow = remember(service) { service?.maxSeconds ?: MutableStateFlow(0) }
@@ -117,6 +122,18 @@ fun FocusTimerScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    val currentTask = task
+                    if (currentTask != null) {
+                        IconButton(onClick = { showEditSheet = true }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Edit,
+                                contentDescription = "Edit Goal",
+                                tint = AccentPrimary
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -177,7 +194,10 @@ fun FocusTimerScreen(
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Button(
                                     onClick = { service?.stopSession() },
-                                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed, contentColor = TextPrimary),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = ErrorRed,
+                                        contentColor = TextPrimary
+                                    ),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text("Stop Running Session")
@@ -189,7 +209,7 @@ fun FocusTimerScreen(
                     // ── Active Timer Ring Section ───────────────────────
                     item {
                         Spacer(modifier = Modifier.height(16.dp))
-                        
+
                         // Phase state description
                         val phaseText = when (timerState) {
                             TimerState.WORK_TICKING -> "FOCUSING"
@@ -198,12 +218,13 @@ fun FocusTimerScreen(
                             TimerState.BREAK_PAUSED -> "BREAK PAUSED"
                             else -> "READY"
                         }
-                        
-                        val phaseColor = if (timerState == TimerState.BREAK_TICKING || timerState == TimerState.BREAK_PAUSED) {
-                            SuccessGreen
-                        } else {
-                            AccentPrimary
-                        }
+
+                        val phaseColor =
+                            if (timerState == TimerState.BREAK_TICKING || timerState == TimerState.BREAK_PAUSED) {
+                                SuccessGreen
+                            } else {
+                                AccentPrimary
+                            }
 
                         Text(
                             text = phaseText,
@@ -287,11 +308,18 @@ fun FocusTimerScreen(
                                     Button(
                                         onClick = {
                                             // Start Foreground Service first, then start session
-                                            val serviceIntent = Intent(context, FocusTimerService::class.java)
-                                            ContextCompat.startForegroundService(context, serviceIntent)
+                                            val serviceIntent =
+                                                Intent(context, FocusTimerService::class.java)
+                                            ContextCompat.startForegroundService(
+                                                context,
+                                                serviceIntent
+                                            )
                                             service?.startSession(currentTaskLocal)
                                         },
-                                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary, contentColor = DarkBackground),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = AccentPrimary,
+                                            contentColor = DarkBackground
+                                        ),
                                         shape = CircleShape,
                                         modifier = Modifier
                                             .width(150.dp)
@@ -302,6 +330,7 @@ fun FocusTimerScreen(
                                         Text("Start Focus", fontWeight = FontWeight.Bold)
                                     }
                                 }
+
                                 TimerState.WORK_TICKING, TimerState.BREAK_TICKING -> {
                                     FilledIconButton(
                                         onClick = { service?.pauseSession() },
@@ -311,7 +340,11 @@ fun FocusTimerScreen(
                                         ),
                                         modifier = Modifier.size(56.dp)
                                     ) {
-                                        Icon(Icons.Filled.Pause, contentDescription = "Pause", modifier = Modifier.size(28.dp))
+                                        Icon(
+                                            Icons.Filled.Pause,
+                                            contentDescription = "Pause",
+                                            modifier = Modifier.size(28.dp)
+                                        )
                                     }
 
                                     FilledIconButton(
@@ -322,9 +355,14 @@ fun FocusTimerScreen(
                                         ),
                                         modifier = Modifier.size(56.dp)
                                     ) {
-                                        Icon(Icons.Filled.Stop, contentDescription = "Stop", modifier = Modifier.size(28.dp))
+                                        Icon(
+                                            Icons.Filled.Stop,
+                                            contentDescription = "Stop",
+                                            modifier = Modifier.size(28.dp)
+                                        )
                                     }
                                 }
+
                                 TimerState.WORK_PAUSED, TimerState.BREAK_PAUSED -> {
                                     FilledIconButton(
                                         onClick = { service?.resumeSession() },
@@ -334,7 +372,11 @@ fun FocusTimerScreen(
                                         ),
                                         modifier = Modifier.size(56.dp)
                                     ) {
-                                        Icon(Icons.Filled.PlayArrow, contentDescription = "Resume", modifier = Modifier.size(28.dp))
+                                        Icon(
+                                            Icons.Filled.PlayArrow,
+                                            contentDescription = "Resume",
+                                            modifier = Modifier.size(28.dp)
+                                        )
                                     }
 
                                     FilledIconButton(
@@ -345,7 +387,11 @@ fun FocusTimerScreen(
                                         ),
                                         modifier = Modifier.size(56.dp)
                                     ) {
-                                        Icon(Icons.Filled.Stop, contentDescription = "Stop", modifier = Modifier.size(28.dp))
+                                        Icon(
+                                            Icons.Filled.Stop,
+                                            contentDescription = "Stop",
+                                            modifier = Modifier.size(28.dp)
+                                        )
                                     }
                                 }
                             }
@@ -367,43 +413,83 @@ fun FocusTimerScreen(
                                     color = TextPrimary
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
-                                
+
                                 Row(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text("Cycle Work Interval", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                                    Text("${currentTaskLocal.workDurationMinutes} minutes", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                    Text(
+                                        "Cycle Work Interval",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextSecondary
+                                    )
+                                    Text(
+                                        "${currentTaskLocal.workDurationMinutes} minutes",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Row(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text("Cycle Break Interval", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                                    Text("${currentTaskLocal.breakDurationMinutes} minutes", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                    Text(
+                                        "Cycle Break Interval",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextSecondary
+                                    )
+                                    Text(
+                                        "${currentTaskLocal.breakDurationMinutes} minutes",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
                                 }
-                                
+
                                 if (currentTaskLocal.enableGradualScaling) {
-                                    Divider(color = DarkSurfaceVariant, modifier = Modifier.padding(vertical = 10.dp))
+                                    Divider(
+                                        color = DarkSurfaceVariant,
+                                        modifier = Modifier.padding(vertical = 10.dp)
+                                    )
                                     Row(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text("Interval Scaling (+)", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                                        Text("+${currentTaskLocal.gradualMinutesIncrement}m work / +1m break", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = InfoBlue)
+                                        Text(
+                                            "Interval Scaling (+)",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = TextSecondary
+                                        )
+                                        Text(
+                                            "+${currentTaskLocal.gradualMinutesIncrement}m work / +1m break",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = InfoBlue
+                                        )
                                     }
-                                    
+
                                     if (timerState != TimerState.IDLE && completedCycles > 0) {
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        val workBonus = completedCycles * currentTaskLocal.gradualMinutesIncrement
+                                        val workBonus =
+                                            completedCycles * currentTaskLocal.gradualMinutesIncrement
                                         val breakBonus = completedCycles
                                         Row(
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            Text("Current Scaling Bonus", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                                            Text("+$workBonus mins study / +$breakBonus mins break", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                                            Text(
+                                                "Current Scaling Bonus",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = TextSecondary
+                                            )
+                                            Text(
+                                                "+$workBonus mins study / +$breakBonus mins break",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = SuccessGreen
+                                            )
                                         }
                                     }
                                 }
@@ -473,6 +559,39 @@ fun FocusTimerScreen(
                     }
                 }
             }
+        }
+
+        if (showEditSheet) {
+            FocusTaskBottomSheet(
+                taskToEdit = task,
+                onDismiss = { showEditSheet = false },
+                onSave = { title, desc, targetMin, workMin, breakMin, scaling, increment ->
+                    val currentTaskVal = task
+                    if (currentTaskVal != null) {
+                        viewModel.updateTask(
+                            id = currentTaskVal.id,
+                            title = title,
+                            description = desc,
+                            dailyTargetMinutes = targetMin,
+                            workMinutes = workMin,
+                            breakMinutes = breakMin,
+                            enableGradualScaling = scaling,
+                            gradualIncrement = increment
+                        )
+                        val updatedTask = currentTaskVal.copy(
+                            title = title,
+                            description = desc,
+                            dailyTargetMinutes = targetMin,
+                            workDurationMinutes = workMin,
+                            breakDurationMinutes = breakMin,
+                            enableGradualScaling = scaling,
+                            gradualMinutesIncrement = increment
+                        )
+                        service?.updateActiveTask(updatedTask)
+                    }
+                    showEditSheet = false
+                }
+            )
         }
     }
 }
