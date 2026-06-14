@@ -289,20 +289,16 @@ class FocusTimerService : Service() {
     private fun playTransitionSound(isToBreak: Boolean) {
         stopBeep()
         beepJob = serviceScope.launch(Dispatchers.IO) {
-            val volume = if (isToBreak) 30 else 100
-            val toneType = if (isToBreak) {
-                ToneGenerator.TONE_CDMA_PIP
-            } else {
-                ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD
-            }
-            val toneDurationMs = if (isToBreak) 300 else 600
+            val volume = 100
+            val toneType = ToneGenerator.TONE_SUP_ERROR
+            val toneDurationMs = if (isToBreak) 250 else 700
             val intervalMs = if (isToBreak) 1500L else 1000L
             val totalDurationMs = 10000L
             val startTime = System.currentTimeMillis()
             
             var toneGen: ToneGenerator? = null
             try {
-                toneGen = ToneGenerator(AudioManager.STREAM_ALARM, volume)
+                toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, volume)
                 while (isActive && (System.currentTimeMillis() - startTime) < totalDurationMs) {
                     toneGen.startTone(toneType, toneDurationMs)
                     delay(intervalMs)
@@ -390,11 +386,51 @@ class FocusTimerService : Service() {
                         startTicker()
                         startForegroundNotification()
                     } else {
-                        _secondsRemaining.value = 0
-                        _timerState.value = if (savedState == TimerState.WORK_TICKING) {
-                            TimerState.BREAK_PAUSED
-                        } else {
-                            TimerState.WORK_PAUSED
+                        val overdueSeconds = -remaining.toInt()
+                        if (savedState == TimerState.WORK_TICKING) {
+                            // Completed a work cycle. Let's see if we are still within the break cycle.
+                            val newCycleCount = savedCompletedCycles + 1
+                            _completedCycles.value = newCycleCount
+                            
+                            val baseBreakMinutes = task.breakDurationMinutes
+                            val breakSeconds = if (task.enableGradualScaling) {
+                                (baseBreakMinutes + newCycleCount) * 60
+                            } else {
+                                baseBreakMinutes * 60
+                            }
+                            
+                            if (overdueSeconds < breakSeconds) {
+                                // Auto-start the break cycle!
+                                _secondsRemaining.value = breakSeconds - overdueSeconds
+                                _maxSeconds.value = breakSeconds
+                                _timerState.value = TimerState.BREAK_TICKING
+                                playTransitionSound(isToBreak = true)
+                                startTicker()
+                            } else {
+                                // Break has also completed. Transition to next work cycle in paused state.
+                                val baseWorkMinutes = task.workDurationMinutes
+                                val workSeconds = if (task.enableGradualScaling) {
+                                    (baseWorkMinutes + (newCycleCount * task.gradualMinutesIncrement)) * 60
+                                } else {
+                                    baseWorkMinutes * 60
+                                }
+                                _secondsRemaining.value = workSeconds
+                                _maxSeconds.value = workSeconds
+                                _timerState.value = TimerState.WORK_PAUSED
+                                playTransitionSound(isToBreak = false)
+                            }
+                        } else if (savedState == TimerState.BREAK_TICKING) {
+                            // Completed a break cycle. Transition to next work cycle in paused state.
+                            val baseWorkMinutes = task.workDurationMinutes
+                            val workSeconds = if (task.enableGradualScaling) {
+                                (baseWorkMinutes + (savedCompletedCycles * task.gradualMinutesIncrement)) * 60
+                            } else {
+                                baseWorkMinutes * 60
+                            }
+                            _secondsRemaining.value = workSeconds
+                            _maxSeconds.value = workSeconds
+                            _timerState.value = TimerState.WORK_PAUSED
+                            playTransitionSound(isToBreak = false)
                         }
                         startForegroundNotification()
                     }
