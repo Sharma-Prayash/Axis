@@ -19,8 +19,8 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.productivity.app.MainActivity
 import com.productivity.app.R
+import com.productivity.app.ui.alarm.AlarmActivity
 import com.productivity.app.data.db.AppDatabase
 import com.productivity.app.data.preferences.AlarmPreferences
 import com.productivity.app.data.model.ScheduleEvent
@@ -253,18 +253,23 @@ class AlarmRingService : Service() {
     // ── Notifications ───────────────────────────────────────────────
 
     /**
-     * Creates the silent notification channel used for the foreground service.
-     * This channel is separate from the reminder notification channels.
+     * Creates the high-importance notification channel used for the ringing
+     * alarm. It must be [NotificationManager.IMPORTANCE_HIGH] so the attached
+     * full-screen intent is allowed to launch [AlarmActivity], and it bypasses
+     * Do-Not-Disturb so the alarm surfaces even in DnD. Sound is left null —
+     * audio is played by the service's own [MediaPlayer] on the alarm stream.
      */
     private fun createAlarmRingChannel() {
         val channel = NotificationChannel(
             CHANNEL_ALARM_RING,
-            "Alarm Ring",
-            NotificationManager.IMPORTANCE_LOW
+            "Ringing Alarm",
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Ongoing notification while alarm is ringing"
+            description = "Shown full-screen while an alarm is ringing"
             setSound(null, null)
             enableVibration(false)
+            setBypassDnd(true)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)
@@ -289,7 +294,10 @@ class AlarmRingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val contentIntent = Intent(this, MainActivity::class.java).apply {
+        // The alarm's full-screen UI. Launched immediately as a full-screen
+        // intent (screen wakes / shows over the lock screen) and also used as
+        // the content-tap target.
+        val alarmActivityIntent = Intent(this, AlarmActivity::class.java).apply {
             if (reminderId != -1L) {
                 putExtra(NotificationHelper.EXTRA_REMINDER_ID, reminderId)
             } else {
@@ -297,10 +305,10 @@ class AlarmRingService : Service() {
             }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val contentPendingIntent = PendingIntent.getActivity(
+        val alarmActivityPendingIntent = PendingIntent.getActivity(
             this,
             if (reminderId != -1L) reminderId.toInt() * 100 else eventId.toInt() * 100 + 200000,
-            contentIntent,
+            alarmActivityIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -315,10 +323,12 @@ class AlarmRingService : Service() {
             .setContentTitle(title)
             .setContentText("Tap to open, or dismiss below")
             .setOngoing(true)
-            .setContentIntent(contentPendingIntent)
+            .setContentIntent(alarmActivityPendingIntent)
+            .setFullScreenIntent(alarmActivityPendingIntent, true)
             .addAction(0, "✓ Dismiss", stopPendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setSilent(true)
 
         if (reminderId != -1L) {

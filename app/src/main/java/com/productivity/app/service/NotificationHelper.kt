@@ -371,7 +371,6 @@ class NotificationHelper @Inject constructor(
     fun showMorningDigestNotification(summary: String) {
         val notificationId = 999999
         val contentIntent = Intent(context, MainActivity::class.java).apply {
-            putExtra("extra_open_personal_manager", true)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val contentPendingIntent = PendingIntent.getActivity(

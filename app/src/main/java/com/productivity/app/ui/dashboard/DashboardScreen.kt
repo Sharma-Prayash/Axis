@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -17,18 +18,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.productivity.app.data.model.ScheduleEvent
-import com.productivity.app.ui.common.DashboardProgressCard
-import com.productivity.app.ui.common.DashboardReminderCard
 import com.productivity.app.ui.common.SectionHeader
+import com.productivity.app.ui.common.DashboardProgressCard
 import com.productivity.app.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
@@ -38,7 +39,6 @@ fun DashboardScreen(
     onNavigateToReminderDetail: (Long) -> Unit = {},
     onNavigateToEventDetail: (Long) -> Unit = {},
     onNavigateToTrackerDetail: (Long) -> Unit = {},
-    onNavigateToPersonalManager: () -> Unit = {},
     onOpenDrawer: () -> Unit = {}
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -47,11 +47,13 @@ fun DashboardScreen(
         SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date())
     }
 
+    val digestHour by viewModel.digestHour.collectAsStateWithLifecycle()
+    val digestMinute by viewModel.digestMinute.collectAsStateWithLifecycle()
+    val digestEnabled by viewModel.digestEnabled.collectAsStateWithLifecycle()
+    var showTimePicker by remember { mutableStateOf(false) }
+
     if (state.isLoading) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = AccentPrimary)
         }
         return
@@ -63,361 +65,505 @@ fun DashboardScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
     ) {
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(Modifier.height(20.dp))
 
-        // ── Greeting Header ─────────────────────────────────────
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onOpenDrawer) {
-                    Icon(
-                        imageVector = Icons.Default.Menu,
-                        contentDescription = "Open Drawer",
-                        tint = TextPrimary
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = greeting,
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = todayFormatted,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary
-                    )
-                }
+        // ── Header ──────────────────────────────────────────────
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onOpenDrawer) {
+                Icon(Icons.Default.Menu, contentDescription = "Open menu", tint = TextPrimary)
             }
-            IconButton(
-                onClick = onNavigateToPersonalManager,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(DarkSurface),
-                colors = IconButtonDefaults.iconButtonColors(contentColor = AccentPrimary)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = "Personal Manager",
-                    modifier = Modifier.size(24.dp)
+            Spacer(Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = greeting,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = todayFormatted,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
 
-        // ── Quick Stats Row ─────────────────────────────────────
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            QuickStatCard(
-                label = "Reminders",
-                value = "${state.todayReminders.size}",
-                icon = Icons.Outlined.NotificationsActive,
-                color = MedicineColor,
-                modifier = Modifier.weight(1f)
+        // ── Up Next (hero) ──────────────────────────────────────
+        state.upNext?.let { next ->
+            UpNextCard(
+                entry = next,
+                onClick = { openEntry(next, onNavigateToReminderDetail, onNavigateToEventDetail) }
             )
-            QuickStatCard(
-                label = "Events",
-                value = "${state.upcomingEvents.size}",
-                icon = Icons.Outlined.CalendarMonth,
-                color = MeetingColor,
-                modifier = Modifier.weight(1f)
-            )
-            QuickStatCard(
-                label = "Trackers",
-                value = "${state.activeTrackers.size}",
-                icon = Icons.Outlined.TrendingUp,
-                color = SuccessGreen,
-                modifier = Modifier.weight(1f)
-            )
+            Spacer(Modifier.height(16.dp))
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
+        // ── Needs attention (overdue) ───────────────────────────
+        if (state.overdue.isNotEmpty()) {
+            OverdueBanner(count = state.overdue.size, onClick = onNavigateToReminders)
+            Spacer(Modifier.height(16.dp))
+        }
 
-        // ── Today's Reminders ───────────────────────────────────
+        // ── Quick stats ─────────────────────────────────────────
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            QuickStat("Reminders", state.todayReminderCount, Icons.Outlined.NotificationsActive, MedicineColor, Modifier.weight(1f), onNavigateToReminders)
+            QuickStat("Events", state.todayEventCount, Icons.Outlined.CalendarMonth, MeetingColor, Modifier.weight(1f), onNavigateToSchedule)
+            QuickStat("Trackers", state.activeTrackerCount, Icons.Outlined.TrendingUp, SuccessGreen, Modifier.weight(1f), onNavigateToTrackers)
+        }
+
+        Spacer(Modifier.height(28.dp))
+
+        // ── Today's agenda ──────────────────────────────────────
         SectionHeader(
-            title = "Today's Reminders",
-            icon = Icons.Outlined.NotificationsActive,
-            actionLabel = if (state.todayReminders.isNotEmpty()) "View All" else null,
-            onAction = onNavigateToReminders
+            title = "Today's Agenda",
+            icon = Icons.Outlined.Today,
+            actionLabel = null
         )
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (state.todayReminders.isEmpty()) {
-            DashboardEmptyCard(
-                icon = Icons.Outlined.NotificationsNone,
-                message = "No reminders for today"
-            )
+        Spacer(Modifier.height(12.dp))
+        if (state.agenda.isEmpty()) {
+            EmptyCard(Icons.Outlined.EventAvailable, "Your day is clear — nothing scheduled.")
         } else {
-            state.todayReminders.forEachIndexed { index, reminder ->
-                DashboardReminderCard(
-                    reminder = reminder,
-                    onClick = { onNavigateToReminderDetail(reminder.id) }
+            state.agenda.forEachIndexed { index, entry ->
+                AgendaRow(
+                    entry = entry,
+                    onClick = { openEntry(entry, onNavigateToReminderDetail, onNavigateToEventDetail) }
                 )
-                if (index < state.todayReminders.lastIndex) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
+                if (index < state.agenda.lastIndex) Spacer(Modifier.height(8.dp))
             }
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
-
-        // ── Upcoming Events ─────────────────────────────────────
-        SectionHeader(
-            title = "Upcoming Events",
-            icon = Icons.Outlined.CalendarMonth,
-            actionLabel = if (state.upcomingEvents.isNotEmpty()) "View All" else null,
-            onAction = onNavigateToSchedule
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (state.upcomingEvents.isEmpty()) {
-            DashboardEmptyCard(
-                icon = Icons.Outlined.EventBusy,
-                message = "No upcoming events this week"
-            )
-        } else {
-            state.upcomingEvents.forEachIndexed { index, event ->
-                DashboardEventCard(
-                    event = event,
-                    onClick = { onNavigateToEventDetail(event.id) }
+        // ── Weekly goals ────────────────────────────────────────
+        if (state.weeklyGoals.isNotEmpty()) {
+            Spacer(Modifier.height(28.dp))
+            SectionHeader(title = "Weekly Goals", icon = Icons.Outlined.Flag, actionLabel = null)
+            Spacer(Modifier.height(12.dp))
+            state.weeklyGoals.forEachIndexed { index, (tracker, goal) ->
+                WeeklyGoalCard(
+                    title = tracker.title,
+                    isCourse = tracker.type == "course",
+                    achieved = goal.achievedCount,
+                    target = goal.targetCount,
+                    onClick = { onNavigateToTrackerDetail(tracker.id) }
                 )
-                if (index < state.upcomingEvents.lastIndex) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
+                if (index < state.weeklyGoals.lastIndex) Spacer(Modifier.height(8.dp))
             }
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
-
-        // ── Active Trackers ─────────────────────────────────────
+        // ── Active trackers ─────────────────────────────────────
+        Spacer(Modifier.height(28.dp))
         SectionHeader(
             title = "Active Trackers",
             icon = Icons.Outlined.TrendingUp,
             actionLabel = if (state.activeTrackers.isNotEmpty()) "View All" else null,
             onAction = onNavigateToTrackers
         )
-        Spacer(modifier = Modifier.height(12.dp))
-
+        Spacer(Modifier.height(12.dp))
         if (state.activeTrackers.isEmpty()) {
-            DashboardEmptyCard(
-                icon = Icons.Outlined.BarChart,
-                message = "No active trackers"
-            )
+            EmptyCard(Icons.Outlined.BarChart, "No active trackers yet.")
         } else {
             state.activeTrackers.forEachIndexed { index, tracker ->
-                DashboardProgressCard(
-                    tracker = tracker,
-                    onClick = { onNavigateToTrackerDetail(tracker.id) }
-                )
-                if (index < state.activeTrackers.lastIndex) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
+                DashboardProgressCard(tracker = tracker, onClick = { onNavigateToTrackerDetail(tracker.id) })
+                if (index < state.activeTrackers.lastIndex) Spacer(Modifier.height(8.dp))
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        // ── Upcoming (next 3 days) ──────────────────────────────
+        if (state.upcoming.isNotEmpty()) {
+            Spacer(Modifier.height(28.dp))
+            SectionHeader(title = "Coming Up", icon = Icons.Outlined.Upcoming, actionLabel = null)
+            Spacer(Modifier.height(12.dp))
+            state.upcoming.forEachIndexed { index, entry ->
+                UpcomingRow(
+                    entry = entry,
+                    onClick = { openEntry(entry, onNavigateToReminderDetail, onNavigateToEventDetail) }
+                )
+                if (index < state.upcoming.lastIndex) Spacer(Modifier.height(8.dp))
+            }
+        }
+
+        // ── Daily digest footer ─────────────────────────────────
+        Spacer(Modifier.height(28.dp))
+        DigestSettingRow(
+            enabled = digestEnabled,
+            time = formatTime(digestHour, digestMinute),
+            onToggle = viewModel::updateDigestEnabled,
+            onEditTime = { showTimePicker = true }
+        )
+
+        Spacer(Modifier.height(32.dp))
+    }
+
+    if (showTimePicker) {
+        val pickerState = rememberTimePickerState(initialHour = digestHour, initialMinute = digestMinute, is24Hour = false)
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            title = { Text("Morning digest time", color = TextPrimary) },
+            text = {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    TimePicker(state = pickerState)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.updateDigestTime(pickerState.hour, pickerState.minute)
+                    showTimePicker = false
+                }) { Text("Save", color = AccentPrimary) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text("Cancel", color = TextSecondary) }
+            },
+            containerColor = DarkSurface
+        )
     }
 }
 
-// ── Quick Stat Card ─────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────
+
+private fun openEntry(
+    entry: AgendaEntry,
+    onReminder: (Long) -> Unit,
+    onEvent: (Long) -> Unit
+) {
+    when (entry) {
+        is AgendaEntry.ReminderEntry -> onReminder(entry.id)
+        is AgendaEntry.EventEntry -> onEvent(entry.id)
+    }
+}
+
+private fun formatTime(hour: Int, minute: Int): String {
+    val cal = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, hour); set(Calendar.MINUTE, minute)
+    }
+    return SimpleDateFormat("h:mm a", Locale.getDefault()).format(cal.time)
+}
+
+private fun relativeLabel(time: Long): String {
+    val diff = time - System.currentTimeMillis()
+    if (diff < 0) {
+        val past = -diff
+        val h = past / 3_600_000
+        val m = (past % 3_600_000) / 60_000
+        return when {
+            h > 0 -> "${h}h ${m}m ago"
+            m > 0 -> "${m}m ago"
+            else -> "Just now"
+        }
+    }
+    val h = diff / 3_600_000
+    val m = (diff % 3_600_000) / 60_000
+    return when {
+        h > 0 -> "in ${h}h ${m}m"
+        m > 0 -> "in ${m}m"
+        else -> "now"
+    }
+}
+
+// ── Up Next hero ────────────────────────────────────────────────────
 
 @Composable
-private fun QuickStatCard(
-    label: String,
-    value: String,
-    icon: ImageVector,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
+private fun UpNextCard(entry: AgendaEntry, onClick: () -> Unit) {
+    val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    val isReminder = entry is AgendaEntry.ReminderEntry
     Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        modifier = modifier
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = AccentPrimary.copy(alpha = 0.14f)),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(color.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = color,
-                    modifier = Modifier.size(18.dp)
-                )
+        Column(Modifier.padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Bolt, contentDescription = null, tint = AccentPrimary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("UP NEXT", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = AccentPrimary)
+                Spacer(Modifier.weight(1f))
+                Text(relativeLabel(entry.time), style = MaterialTheme.typography.labelMedium, color = AccentTertiary, fontWeight = FontWeight.SemiBold)
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
             Text(
-                text = value,
+                text = entry.title,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = TextPrimary
+                color = TextPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
+                text = "${if (isReminder) "Reminder" else "Event"} · ${timeFormatter.format(Date(entry.time))}",
+                style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary
             )
         }
     }
 }
 
-// ── Dashboard Event Card ────────────────────────────────────────────
+@Composable
+private fun OverdueBanner(count: Int, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = ErrorRed.copy(alpha = 0.12f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = ErrorRed, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = if (count == 1) "1 item is overdue" else "$count items are overdue",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = TextPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = TextSecondary)
+        }
+    }
+}
 
 @Composable
-private fun DashboardEventCard(
-    event: ScheduleEvent,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+private fun QuickStat(
+    label: String,
+    value: Int,
+    icon: ImageVector,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
 ) {
-    val typeColor = getEventTypeColor(event.type)
-    val dateFormatter = remember { SimpleDateFormat("EEE, MMM d", Locale.getDefault()) }
-    val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
-
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        onClick = onClick,
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = DarkSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        modifier = modifier
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Type badge
+        Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(typeColor.copy(alpha = 0.15f)),
+                modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(color.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = getEventTypeIcon(event.type),
-                    contentDescription = event.type,
-                    tint = typeColor,
-                    modifier = Modifier.size(20.dp)
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("$value", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+        }
+    }
+}
+
+// ── Agenda row ──────────────────────────────────────────────────────
+
+@Composable
+private fun AgendaRow(entry: AgendaEntry, onClick: () -> Unit) {
+    val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    val isReminder = entry is AgendaEntry.ReminderEntry
+    val accent = when {
+        entry.isCompleted -> TextTertiary
+        entry.isOverdue -> ErrorRed
+        isReminder -> GeneralColor
+        else -> InfoBlue
+    }
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Time column
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(64.dp)) {
+                Text(
+                    text = timeFormatter.format(Date(entry.time)),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (entry.isOverdue) ErrorRed else TextSecondary
                 )
             }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(accent))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
                 Text(
-                    text = event.title,
+                    text = entry.title,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (entry.isCompleted) TextTertiary else TextPrimary,
+                    textDecoration = if (entry.isCompleted) TextDecoration.LineThrough else null,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = when {
+                        entry.isCompleted -> "Done"
+                        entry.isOverdue -> "Overdue · ${relativeLabel(entry.time)}"
+                        isReminder -> "Reminder"
+                        else -> "Event"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (entry.isOverdue) ErrorRed else TextTertiary
+                )
+            }
+            Icon(
+                imageVector = if (isReminder) Icons.Outlined.Notifications else Icons.Outlined.Event,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun UpcomingRow(entry: AgendaEntry, onClick: () -> Unit) {
+    val dateFormatter = remember { SimpleDateFormat("EEE, MMM d · h:mm a", Locale.getDefault()) }
+    val isReminder = entry is AgendaEntry.ReminderEntry
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = if (isReminder) Icons.Outlined.Notifications else Icons.Outlined.Event,
+                contentDescription = null,
+                tint = if (isReminder) GeneralColor else InfoBlue,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = entry.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = dateFormatter.format(Date(event.startDatetime)),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = dateFormatter.format(Date(entry.time)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeeklyGoalCard(
+    title: String,
+    isCourse: Boolean,
+    achieved: Int,
+    target: Int,
+    onClick: () -> Unit
+) {
+    val color = if (isCourse) InfoBlue else AccentTertiary
+    val progress = if (target > 0) achieved.toFloat() / target.toFloat() else 0f
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isCourse) Icons.Outlined.School else Icons.Outlined.WorkOutline,
+                        contentDescription = null, tint = color, modifier = Modifier.size(16.dp)
                     )
-                    if (!event.isAllDay) {
-                        Text(
-                            text = " · ${timeFormatter.format(Date(event.startDatetime))}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary
-                        )
-                    } else {
-                        Text(
-                            text = " · All day",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary
-                        )
-                    }
                 }
-                if (!event.location.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = event.location,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                )
+                Text("$achieved/$target", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = AccentPrimary)
+            }
+            Spacer(Modifier.height(10.dp))
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                color = AccentPrimary, trackColor = DarkSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun DigestSettingRow(
+    enabled: Boolean,
+    time: String,
+    onToggle: (Boolean) -> Unit,
+    onEditTime: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(AccentPrimary.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.WbSunny, contentDescription = null, tint = AccentPrimary, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Morning digest", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Text("A daily summary of your day", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onToggle,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = DarkBackground,
+                        checkedTrackColor = AccentPrimary,
+                        uncheckedThumbColor = TextTertiary,
+                        uncheckedTrackColor = DarkSurfaceVariant
                     )
+                )
+            }
+            if (enabled) {
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable(onClick = onEditTime).padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Delivered at", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(time, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = AccentPrimary)
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Outlined.Edit, contentDescription = "Edit time", tint = AccentPrimary, modifier = Modifier.size(16.dp))
+                    }
                 }
             }
         }
     }
 }
 
-// ── Dashboard Empty Card ────────────────────────────────────────────
-
 @Composable
-private fun DashboardEmptyCard(
-    icon: ImageVector,
-    message: String,
-    modifier: Modifier = Modifier
-) {
+private fun EmptyCard(icon: ImageVector, message: String) {
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = DarkSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        modifier = modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = TextTertiary,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextTertiary
-            )
+            Icon(icon, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(message, style = MaterialTheme.typography.bodyMedium, color = TextTertiary)
         }
     }
-}
-
-// ── Event Helpers ───────────────────────────────────────────────────
-
-private fun getEventTypeColor(type: String): Color = when (type.lowercase()) {
-    "meeting" -> MeetingColor
-    "appointment" -> GeneralColor
-    "deadline" -> DeadlineColor
-    else -> AccentPrimary
-}
-
-private fun getEventTypeIcon(type: String): ImageVector = when (type.lowercase()) {
-    "meeting" -> Icons.Outlined.Groups
-    "appointment" -> Icons.Outlined.PersonOutline
-    "deadline" -> Icons.Outlined.Timer
-    else -> Icons.Outlined.Event
 }

@@ -15,58 +15,52 @@ import androidx.navigation.compose.rememberNavController
 import com.productivity.app.ui.navigation.NavGraph
 import com.productivity.app.ui.navigation.Screen
 import com.productivity.app.ui.theme.ProductivityTheme
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import android.content.Intent
 import androidx.compose.ui.unit.dp
 import com.productivity.app.service.AlarmManagerHelper
 import com.productivity.app.service.NotificationHelper
+import com.productivity.app.data.preferences.SetupPreferences
+import com.productivity.app.ui.setup.PermissionSetupScreen
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    private val requestNotificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            // Permission granted
-        } else {
-            // Permission denied
-        }
-    }
+    @Inject lateinit var setupPreferences: SetupPreferences
 
     private var reminderIdParam by mutableStateOf<Long?>(null)
     private var eventIdParam by mutableStateOf<Long?>(null)
-    private var openPersonalManager by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        requestNotificationPermission()
         handleIntent(intent)
 
         setContent {
             ProductivityTheme {
-                MainScreen(
-                    alarmReminderId = reminderIdParam,
-                    alarmEventId = eventIdParam,
-                    openPersonalManager = openPersonalManager,
-                    onClearAlarm = {
-                        reminderIdParam = null
-                        eventIdParam = null
-                    },
-                    onClearOpenPersonalManager = {
-                        openPersonalManager = false
-                    }
-                )
+                var showSetup by remember { mutableStateOf(!setupPreferences.setupCompleted) }
+                if (showSetup) {
+                    PermissionSetupScreen(
+                        onDone = {
+                            setupPreferences.setupCompleted = true
+                            showSetup = false
+                        }
+                    )
+                } else {
+                    MainScreen(
+                        alarmReminderId = reminderIdParam,
+                        alarmEventId = eventIdParam,
+                        onClearAlarm = {
+                            reminderIdParam = null
+                            eventIdParam = null
+                        }
+                    )
+                }
             }
         }
     }
@@ -86,21 +80,6 @@ class MainActivity : ComponentActivity() {
         if (eventId != -1L) {
             eventIdParam = eventId
         }
-        if (intent?.getBooleanExtra("extra_open_personal_manager", false) == true) {
-            openPersonalManager = true
-        }
-    }
-
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
     }
 }
 
@@ -108,9 +87,7 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(
     alarmReminderId: Long?,
     alarmEventId: Long?,
-    openPersonalManager: Boolean,
-    onClearAlarm: () -> Unit,
-    onClearOpenPersonalManager: () -> Unit
+    onClearAlarm: () -> Unit
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -118,17 +95,19 @@ fun MainScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(alarmReminderId, alarmEventId, openPersonalManager) {
-        if (alarmReminderId != null || alarmEventId != null) {
-            navController.navigate(Screen.AlarmActive.createRoute(alarmReminderId, alarmEventId)) {
+    LaunchedEffect(alarmReminderId, alarmEventId) {
+        // Tapping a reminder/event notification opens its detail screen.
+        // The ringing alarm UI itself is owned by the standalone AlarmActivity.
+        if (alarmReminderId != null) {
+            navController.navigate(Screen.ReminderDetail.createRoute(alarmReminderId)) {
                 launchSingleTop = true
             }
             onClearAlarm()
-        } else if (openPersonalManager) {
-            navController.navigate(Screen.PersonalManager.route) {
+        } else if (alarmEventId != null) {
+            navController.navigate(Screen.EventDetail.createRoute(alarmEventId)) {
                 launchSingleTop = true
             }
-            onClearOpenPersonalManager()
+            onClearAlarm()
         }
     }
 
