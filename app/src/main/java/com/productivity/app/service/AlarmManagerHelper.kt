@@ -33,7 +33,17 @@ class AlarmManagerHelper @Inject constructor(
     companion object {
         const val EXTRA_REMINDER_ID = "extra_reminder_id"
         const val EXTRA_EVENT_ID = "extra_event_id"
+        /** Legacy — kept for compatibility; prefer [EXTRA_EVENT_ALERT_KIND]. */
         const val EXTRA_IS_PRE_ALERT = "extra_is_pre_alert"
+        const val EXTRA_EVENT_ALERT_KIND = "extra_event_alert_kind"
+
+        /** Fires 5 minutes before an event starts. */
+        const val ALERT_PRE = "pre"
+        /** Fires when an event starts. */
+        const val ALERT_START = "start"
+        /** Fires when an event ends. */
+        const val ALERT_END = "end"
+
         private const val TAG = "AlarmManagerHelper"
     }
 
@@ -80,51 +90,50 @@ class AlarmManagerHelper @Inject constructor(
     }
 
     /**
-     * Schedules an alert for a schedule event (either 5-min pre-alert or on-time).
+     * Schedules an alert for a schedule event. [kind] is one of [ALERT_PRE],
+     * [ALERT_START], or [ALERT_END].
      */
-    fun scheduleEventAlert(eventId: Long, triggerAtMillis: Long, isPreAlert: Boolean) {
+    fun scheduleEventAlert(eventId: Long, triggerAtMillis: Long, kind: String) {
         val now = System.currentTimeMillis()
         if (triggerAtMillis <= now) {
-            Log.d(TAG, "Not scheduling alarm for event $eventId (isPreAlert=$isPreAlert) because trigger time is in the past")
+            Log.d(TAG, "Not scheduling alarm for event $eventId (kind=$kind) because trigger time is in the past")
             return
         }
 
-        val requestCode = getEventRequestCode(eventId, isPreAlert)
-        val pendingIntent = buildEventPendingIntent(eventId, isPreAlert, requestCode)
+        val requestCode = getEventRequestCode(eventId, kind)
+        val pendingIntent = buildEventPendingIntent(eventId, kind, requestCode)
         setAlarmClock(triggerAtMillis, pendingIntent)
-        Log.d(TAG, "Scheduled alarm-clock event alarm for event $eventId (isPreAlert=$isPreAlert) at $triggerAtMillis")
+        Log.d(TAG, "Scheduled alarm-clock event alarm for event $eventId (kind=$kind) at $triggerAtMillis")
     }
 
     /**
-     * Cancels both pre-alert and on-time alerts for the given schedule event.
+     * Cancels all alerts (pre / start / end) for the given schedule event.
      */
     fun cancelEventAlerts(eventId: Long) {
-        val preCode = getEventRequestCode(eventId, true)
-        val preIntent = buildEventPendingIntent(eventId, true, preCode)
-        alarmManager.cancel(preIntent)
-        preIntent.cancel()
-
-        val onTimeCode = getEventRequestCode(eventId, false)
-        val onTimeIntent = buildEventPendingIntent(eventId, false, onTimeCode)
-        alarmManager.cancel(onTimeIntent)
-        onTimeIntent.cancel()
-
+        listOf(ALERT_PRE, ALERT_START, ALERT_END).forEach { kind ->
+            val code = getEventRequestCode(eventId, kind)
+            val intent = buildEventPendingIntent(eventId, kind, code)
+            alarmManager.cancel(intent)
+            intent.cancel()
+        }
         Log.d(TAG, "Cancelled alerts for event $eventId")
     }
 
-    private fun getEventRequestCode(eventId: Long, isPreAlert: Boolean): Int {
-        val base = eventId.toInt()
-        return if (isPreAlert) {
-            base * 2 + 200000
-        } else {
-            base * 2 + 200001
+    private fun getEventRequestCode(eventId: Long, kind: String): Int {
+        val base = eventId.toInt() * 3 + 200000
+        return when (kind) {
+            ALERT_PRE -> base
+            ALERT_START -> base + 1
+            else -> base + 2 // ALERT_END
         }
     }
 
-    private fun buildEventPendingIntent(eventId: Long, isPreAlert: Boolean, requestCode: Int): PendingIntent {
+    private fun buildEventPendingIntent(eventId: Long, kind: String, requestCode: Int): PendingIntent {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra(EXTRA_EVENT_ID, eventId)
-            putExtra(EXTRA_IS_PRE_ALERT, isPreAlert)
+            putExtra(EXTRA_EVENT_ALERT_KIND, kind)
+            // Keep the legacy flag populated for any older readers.
+            putExtra(EXTRA_IS_PRE_ALERT, kind == ALERT_PRE)
         }
         return PendingIntent.getBroadcast(
             context,

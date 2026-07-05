@@ -19,7 +19,7 @@ import com.productivity.app.data.model.*
         FocusTask::class,
         FocusLog::class
     ],
-    version = 3,
+    version = 5,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {

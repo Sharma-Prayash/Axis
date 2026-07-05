@@ -10,12 +10,15 @@ import javax.inject.Singleton
 interface FocusRepository {
     fun getAllTasks(): Flow<List<FocusTask>>
     suspend fun getTaskById(id: Long): FocusTask?
+    fun getTaskForTracker(trackerId: Long): Flow<FocusTask?>
+    suspend fun getTaskForTrackerSync(trackerId: Long): FocusTask?
     suspend fun insertTask(task: FocusTask): Long
     suspend fun updateTask(task: FocusTask)
     suspend fun deleteTask(task: FocusTask)
     fun getLogsForTask(taskId: Long): Flow<List<FocusLog>>
     fun getLogsForDate(date: String): Flow<List<FocusLog>>
     suspend fun addFocusMinutes(taskId: Long, minutes: Int, date: String)
+    suspend fun getMinutesForTaskAndDate(taskId: Long, date: String): Int
 }
 
 @Singleton
@@ -28,6 +31,12 @@ class FocusRepositoryImpl @Inject constructor(
 
     override suspend fun getTaskById(id: Long): FocusTask? =
         focusDao.getTaskById(id)
+
+    override fun getTaskForTracker(trackerId: Long): Flow<FocusTask?> =
+        focusDao.getTaskForTracker(trackerId)
+
+    override suspend fun getTaskForTrackerSync(trackerId: Long): FocusTask? =
+        focusDao.getTaskForTrackerSync(trackerId)
 
     override suspend fun insertTask(task: FocusTask): Long =
         focusDao.insertTask(task)
@@ -54,4 +63,7 @@ class FocusRepositoryImpl @Inject constructor(
             focusDao.insertLog(newLog)
         }
     }
+
+    override suspend fun getMinutesForTaskAndDate(taskId: Long, date: String): Int =
+        focusDao.getLogForTaskAndDateSync(taskId, date)?.durationMinutes ?: 0
 }

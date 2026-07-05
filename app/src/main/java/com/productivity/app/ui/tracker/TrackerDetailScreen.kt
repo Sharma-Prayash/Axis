@@ -34,17 +34,21 @@ import java.util.*
 fun TrackerDetailScreen(
     trackerId: Long,
     viewModel: TrackerViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onNavigateToFocusTimer: (Long) -> Unit = {}
 ) {
     val tracker by viewModel.selectedTracker.collectAsStateWithLifecycle()
     val units by viewModel.selectedTrackerUnits.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val weeklyGoal by viewModel.weeklyGoal.collectAsStateWithLifecycle()
     val completionDates by viewModel.completionDatesMap.collectAsStateWithLifecycle()
+    val linkedFocusTask by viewModel.linkedFocusTask.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showAddUnit by remember { mutableStateOf(false) }
     var newUnitTitle by remember { mutableStateOf("") }
+    var editingUnit by remember { mutableStateOf<ProgressUnit?>(null) }
+    var showFocusDialog by remember { mutableStateOf(false) }
 
     // Load the tracker on first composition
     LaunchedEffect(trackerId) {
@@ -65,6 +69,12 @@ fun TrackerDetailScreen(
                 }
                 is TrackerUiEvent.UnitCompleted -> {
                     snackbarHostState.showSnackbar("Unit completed ✓")
+                }
+                is TrackerUiEvent.UnitUpdated -> {
+                    snackbarHostState.showSnackbar("Module updated")
+                }
+                is TrackerUiEvent.FocusLinked -> {
+                    snackbarHostState.showSnackbar("Focus time set for this tracker")
                 }
                 is TrackerUiEvent.Error -> {
                     snackbarHostState.showSnackbar(event.message)
@@ -245,6 +255,15 @@ fun TrackerDetailScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
+                    // ── Focus Time ───────────────────────────
+                    FocusTimeCard(
+                        linkedTask = linkedFocusTask,
+                        onSetFocus = { showFocusDialog = true },
+                        onStartFocus = { linkedFocusTask?.let { onNavigateToFocusTimer(it.id) } }
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
                     // ── Units Section Header ─────────────────
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -365,7 +384,9 @@ fun TrackerDetailScreen(
                             index = index + 1,
                             typeColor = typeColor,
                             trackerType = trk.type,
-                            onComplete = { viewModel.completeUnit(unit.id) }
+                            onComplete = { viewModel.completeUnit(unit.id) },
+                            onUncomplete = { viewModel.uncompleteUnit(unit.id) },
+                            onEdit = { editingUnit = unit }
                         )
                         if (index < units.lastIndex) {
                             Spacer(modifier = Modifier.height(4.dp))
@@ -435,6 +456,195 @@ fun TrackerDetailScreen(
             containerColor = DarkSurface
         )
     }
+
+    // ── Edit Module (name + note) Dialog ─────────────────────────
+    editingUnit?.let { unit ->
+        var nameInput by remember(unit.id) { mutableStateOf(unit.title) }
+        var noteInput by remember(unit.id) { mutableStateOf(unit.notes ?: "") }
+        AlertDialog(
+            onDismissRequest = { editingUnit = null },
+            title = { Text("Edit module", color = TextPrimary, fontWeight = FontWeight.SemiBold) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = nameInput,
+                        onValueChange = { nameInput = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPrimary,
+                            unfocusedBorderColor = DarkSurfaceVariant,
+                            focusedLabelColor = AccentPrimary,
+                            unfocusedLabelColor = TextTertiary,
+                            cursorColor = AccentPrimary,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = noteInput,
+                        onValueChange = { noteInput = it },
+                        label = { Text("Note (optional)") },
+                        placeholder = { Text("Something to remember about this module") },
+                        minLines = 2,
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPrimary,
+                            unfocusedBorderColor = DarkSurfaceVariant,
+                            focusedLabelColor = AccentPrimary,
+                            unfocusedLabelColor = TextTertiary,
+                            cursorColor = AccentPrimary,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.editUnit(unit.id, nameInput, noteInput)
+                    editingUnit = null
+                }) { Text("Save", color = AccentPrimary, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingUnit = null }) { Text("Cancel", color = TextSecondary) }
+            },
+            containerColor = DarkSurface
+        )
+    }
+
+    // ── Focus Time Dialog ────────────────────────────────────────
+    if (showFocusDialog) {
+        FocusTimeDialog(
+            existing = linkedFocusTask,
+            onDismiss = { showFocusDialog = false },
+            onSave = { target, work, brk ->
+                viewModel.setTrackerFocus(target, work, brk)
+                showFocusDialog = false
+            }
+        )
+    }
+}
+
+// ── Focus Time Card ─────────────────────────────────────────────
+
+@Composable
+private fun FocusTimeCard(
+    linkedTask: com.productivity.app.data.model.FocusTask?,
+    onSetFocus: () -> Unit,
+    onStartFocus: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Timer, contentDescription = null, tint = AccentPrimary, modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Focus Time",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onSetFocus) {
+                    Text(if (linkedTask == null) "Set" else "Edit", color = AccentPrimary)
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            if (linkedTask != null) {
+                Text(
+                    text = "Daily target ${linkedTask.dailyTargetMinutes} min · ${linkedTask.workDurationMinutes}m focus / ${linkedTask.breakDurationMinutes}m break",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = onStartFocus,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary, contentColor = DarkBackground)
+                ) {
+                    Icon(Icons.Outlined.PlayCircleOutline, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Start Focus Session", fontWeight = FontWeight.SemiBold)
+                }
+            } else {
+                Text(
+                    text = "Set a daily focus target for this tracker. It becomes a Focus task you can start right here.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FocusTimeDialog(
+    existing: com.productivity.app.data.model.FocusTask?,
+    onDismiss: () -> Unit,
+    onSave: (target: Int, work: Int, brk: Int) -> Unit
+) {
+    var target by remember { mutableStateOf(existing?.dailyTargetMinutes?.toString() ?: "60") }
+    var work by remember { mutableStateOf(existing?.workDurationMinutes?.toString() ?: "25") }
+    var brk by remember { mutableStateOf(existing?.breakDurationMinutes?.toString() ?: "5") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Focus time", color = TextPrimary, fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column {
+                MinuteField("Daily target (minutes)", target) { target = it }
+                Spacer(modifier = Modifier.height(10.dp))
+                MinuteField("Focus interval (minutes)", work) { work = it }
+                Spacer(modifier = Modifier.height(10.dp))
+                MinuteField("Break interval (minutes)", brk) { brk = it }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val t = target.toIntOrNull() ?: 0
+                val w = work.toIntOrNull() ?: 25
+                val b = brk.toIntOrNull() ?: 5
+                if (t > 0 && w > 0) onSave(t, w, b)
+            }) { Text("Save", color = AccentPrimary, fontWeight = FontWeight.SemiBold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } },
+        containerColor = DarkSurface
+    )
+}
+
+@Composable
+private fun MinuteField(label: String, value: String, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { new -> onChange(new.filter { it.isDigit() }.take(4)) },
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+        ),
+        modifier = Modifier.fillMaxWidth(),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = AccentPrimary,
+            unfocusedBorderColor = DarkSurfaceVariant,
+            focusedLabelColor = AccentPrimary,
+            unfocusedLabelColor = TextTertiary,
+            cursorColor = AccentPrimary,
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary
+        ),
+        shape = RoundedCornerShape(10.dp)
+    )
 }
 
 // ── Unit Item ───────────────────────────────────────────────────
@@ -445,9 +655,12 @@ private fun UnitItem(
     index: Int,
     typeColor: Color,
     trackerType: String,
-    onComplete: () -> Unit
+    onComplete: () -> Unit,
+    onUncomplete: () -> Unit,
+    onEdit: () -> Unit
 ) {
     val dateFormatter = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
+    var menuExpanded by remember { mutableStateOf(false) }
 
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -497,9 +710,28 @@ private fun UnitItem(
                     fontWeight = FontWeight.Medium,
                     color = if (unit.isCompleted) TextTertiary else TextPrimary,
                     textDecoration = if (unit.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (!unit.notes.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Outlined.StickyNote2,
+                            contentDescription = null,
+                            tint = WarningAmber,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = unit.notes,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
                 if (unit.isCompleted && unit.completedAt != null) {
                     Text(
                         text = "Completed ${dateFormatter.format(Date(unit.completedAt))}",
@@ -509,7 +741,7 @@ private fun UnitItem(
                 }
             }
 
-            // Complete button
+            // Complete checkbox (incomplete only)
             if (!unit.isCompleted) {
                 Checkbox(
                     checked = false,
@@ -520,6 +752,35 @@ private fun UnitItem(
                         checkmarkColor = DarkBackground
                     )
                 )
+            }
+
+            // Overflow menu: edit note/name, and undo completion
+            Box {
+                IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Outlined.MoreVert,
+                        contentDescription = "Module options",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Edit name & note") },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                        onClick = { menuExpanded = false; onEdit() }
+                    )
+                    if (unit.isCompleted) {
+                        DropdownMenuItem(
+                            text = { Text("Mark as incomplete") },
+                            leadingIcon = { Icon(Icons.Outlined.Undo, contentDescription = null) },
+                            onClick = { menuExpanded = false; onUncomplete() }
+                        )
+                    }
+                }
             }
         }
     }

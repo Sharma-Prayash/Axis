@@ -25,6 +25,9 @@ interface ReminderDao {
     @Query("SELECT * FROM reminder WHERE is_completed = 0 AND (datetime > :now OR (is_snoozed = 1 AND snooze_until > :now)) ORDER BY datetime ASC")
     suspend fun getPendingReminders(now: Long): List<Reminder>
 
+    @Query("SELECT * FROM reminder WHERE is_completed = 0 AND recurrence_rule IS NOT NULL AND recurrence_rule != ''")
+    suspend fun getActiveRecurringReminders(): List<Reminder>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(reminder: Reminder): Long
 

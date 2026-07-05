@@ -20,6 +20,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.productivity.app.data.model.ScheduleEvent
 import com.productivity.app.ui.theme.*
 import java.text.SimpleDateFormat
@@ -30,16 +34,25 @@ import java.util.*
 fun EventDetailScreen(
     eventId: Long,
     viewModel: ScheduleViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onNavigateToEdit: (Long) -> Unit = {}
 ) {
     val event by viewModel.selectedEvent.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val notionLoading by viewModel.notionLoading.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    // Load the event on first composition
-    LaunchedEffect(eventId) {
-        viewModel.loadEvent(eventId)
+    // Load on first composition and whenever the screen resumes (e.g. returning
+    // from the edit screen) so changes are reflected immediately.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, eventId) {
+        val observer = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME) viewModel.loadEvent(eventId)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // Handle UI events
@@ -47,6 +60,7 @@ fun EventDetailScreen(
         viewModel.uiEvent.collect { uiEvent ->
             when (uiEvent) {
                 is ScheduleUiEvent.EventDeleted -> onNavigateBack()
+                is ScheduleUiEvent.NotionNoteCreated -> snackbarHostState.showSnackbar("Notion note created ✓")
                 is ScheduleUiEvent.Error -> snackbarHostState.showSnackbar(uiEvent.message)
                 else -> {}
             }
@@ -63,6 +77,13 @@ fun EventDetailScreen(
                         onNavigateBack()
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (event != null) {
+                        IconButton(onClick = { onNavigateToEdit(eventId) }) {
+                            Icon(Icons.Outlined.Edit, contentDescription = "Edit", tint = AccentPrimary)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -203,7 +224,83 @@ fun EventDetailScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // ── Notion Meeting Notes ─────────────────────
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Outlined.EditNote,
+                                contentDescription = null,
+                                tint = AccentPrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Notion Notes",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextPrimary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (evt.notionPageUrl != null)
+                                "A Notion note is linked to this event and saved permanently."
+                            else
+                                "Create a Notion page for this event's notes — the link is saved so you can reopen it anytime.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextTertiary
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        if (evt.notionPageUrl != null) {
+                            Button(
+                                onClick = { viewModel.openNotionNote(context, evt) },
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = AccentPrimary,
+                                    contentColor = DarkBackground
+                                )
+                            ) {
+                                Icon(Icons.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Open in Notion", fontWeight = FontWeight.SemiBold)
+                            }
+                        } else {
+                            Button(
+                                onClick = { viewModel.createNotionNote(evt.id) },
+                                enabled = !notionLoading,
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = AccentPrimary.copy(alpha = 0.15f),
+                                    contentColor = AccentPrimary,
+                                    disabledContainerColor = DarkSurfaceVariant
+                                )
+                            ) {
+                                if (notionLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        color = AccentPrimary,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(Icons.Outlined.NoteAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Create Notion note", fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // ── Delete Button ────────────────────────────
                 OutlinedButton(

@@ -21,7 +21,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.productivity.app.data.model.Reminder
+import com.productivity.app.domain.reminder.Recurrence
 import com.productivity.app.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -31,7 +35,8 @@ import java.util.*
 fun ReminderDetailScreen(
     reminderId: Long,
     viewModel: ReminderViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onNavigateToEdit: (Long) -> Unit = {}
 ) {
     val reminder by viewModel.selectedReminder.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
@@ -39,9 +44,15 @@ fun ReminderDetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showSnoozeOptions by remember { mutableStateOf(false) }
 
-    // Load the reminder on first composition
-    LaunchedEffect(reminderId) {
-        viewModel.loadReminder(reminderId)
+    // Load the reminder on first composition, and reload whenever the screen
+    // resumes (e.g. returning from the edit screen) so edits show immediately.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, reminderId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.loadReminder(reminderId)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // Handle UI events
@@ -57,6 +68,9 @@ fun ReminderDetailScreen(
                 }
                 is ReminderUiEvent.ReminderSnoozed -> {
                     snackbarHostState.showSnackbar("Snoozed for ${event.durationMinutes} minutes")
+                }
+                is ReminderUiEvent.ReminderUpdated -> {
+                    viewModel.loadReminder(reminderId)
                 }
                 is ReminderUiEvent.Error -> {
                     snackbarHostState.showSnackbar(event.message)
@@ -84,6 +98,17 @@ fun ReminderDetailScreen(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
+                    }
+                },
+                actions = {
+                    if (reminder?.isCompleted == false) {
+                        IconButton(onClick = { onNavigateToEdit(reminderId) }) {
+                            Icon(
+                                Icons.Outlined.Edit,
+                                contentDescription = "Edit",
+                                tint = AccentPrimary
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -221,15 +246,15 @@ fun ReminderDetailScreen(
                             )
                         }
 
-                        if (rem.recurrenceRule != null) {
+                        if (Recurrence.isRecurring(rem.recurrenceRule)) {
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 12.dp),
                                 color = DarkSurfaceVariant
                             )
                             DetailRow(
                                 icon = Icons.Outlined.Repeat,
-                                label = "Recurrence",
-                                value = rem.recurrenceRule,
+                                label = "Repeats",
+                                value = Recurrence.label(rem.recurrenceRule),
                                 iconTint = AccentTertiary
                             )
                         }

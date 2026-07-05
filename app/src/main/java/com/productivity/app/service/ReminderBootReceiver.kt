@@ -50,14 +50,33 @@ class ReminderBootReceiver : BroadcastReceiver() {
                     Log.d(TAG, "No pending reminders to reschedule")
                 }
 
+                // 1b. Advance any recurring reminders whose occurrence was
+                //     missed while the device was off, so the series resumes.
+                val recurring = db.reminderDao().getActiveRecurringReminders()
+                for (reminder in recurring) {
+                    val currentTrigger = reminder.snoozeUntil ?: reminder.datetime
+                    if (currentTrigger <= now) {
+                        val next = com.productivity.app.domain.reminder.Recurrence
+                            .nextOccurrence(reminder.recurrenceRule, reminder.datetime, now)
+                        if (next != null) {
+                            db.reminderDao().update(
+                                reminder.copy(datetime = next, isSnoozed = false, snoozeUntil = null)
+                            )
+                            alarmHelper.scheduleExact(reminder.id, next)
+                            Log.d(TAG, "Recovered recurring reminder ${reminder.id} → $next after boot")
+                        }
+                    }
+                }
+
                 // 2. Reschedule pending schedule events
                 val futureEvents = db.scheduleEventDao().getFutureEvents(now)
                 if (futureEvents.isNotEmpty()) {
                     var eventScheduledCount = 0
                     for (event in futureEvents) {
                         if (!event.isAllDay) {
-                            alarmHelper.scheduleEventAlert(event.id, event.startDatetime, false)
-                            alarmHelper.scheduleEventAlert(event.id, event.startDatetime - 5 * 60 * 1000L, true)
+                            alarmHelper.scheduleEventAlert(event.id, event.startDatetime - 5 * 60 * 1000L, AlarmManagerHelper.ALERT_PRE)
+                            alarmHelper.scheduleEventAlert(event.id, event.startDatetime, AlarmManagerHelper.ALERT_START)
+                            alarmHelper.scheduleEventAlert(event.id, event.endDatetime, AlarmManagerHelper.ALERT_END)
                             eventScheduledCount++
                         }
                     }

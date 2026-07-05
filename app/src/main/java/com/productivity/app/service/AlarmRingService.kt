@@ -46,7 +46,7 @@ class AlarmRingService : Service() {
         private const val TAG = "AlarmRingService"
         const val EXTRA_REMINDER_ID = "extra_reminder_id"
         const val EXTRA_EVENT_ID = "extra_event_id"
-        const val EXTRA_IS_PRE_ALERT = "extra_is_pre_alert"
+        const val EXTRA_EVENT_ALERT_KIND = "extra_event_alert_kind"
         private const val ONGOING_NOTIFICATION_ID = 9999
         private const val CHANNEL_ALARM_RING = "channel_alarm_ring"
     }
@@ -57,7 +57,7 @@ class AlarmRingService : Service() {
     private var stopRunnable: Runnable? = null
     private var currentReminderId: Long = -1L
     private var currentEventId: Long = -1L
-    private var currentIsPreAlert: Boolean = false
+    private var currentAlertKind: String = AlarmManagerHelper.ALERT_START
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -69,7 +69,7 @@ class AlarmRingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val reminderId = intent?.getLongExtra(EXTRA_REMINDER_ID, -1L) ?: -1L
         val eventId = intent?.getLongExtra(EXTRA_EVENT_ID, -1L) ?: -1L
-        val isPreAlert = intent?.getBooleanExtra(EXTRA_IS_PRE_ALERT, false) ?: false
+        val alertKind = intent?.getStringExtra(EXTRA_EVENT_ALERT_KIND) ?: AlarmManagerHelper.ALERT_START
 
         if (reminderId == -1L && eventId == -1L) {
             Log.e(TAG, "Started with neither reminder ID nor event ID — stopping")
@@ -82,18 +82,18 @@ class AlarmRingService : Service() {
 
         currentReminderId = reminderId
         currentEventId = eventId
-        currentIsPreAlert = isPreAlert
-        Log.d(TAG, "Starting alarm ring for reminder=$reminderId, event=$eventId, isPreAlert=$isPreAlert")
+        currentAlertKind = alertKind
+        Log.d(TAG, "Starting alarm ring for reminder=$reminderId, event=$eventId, kind=$alertKind")
 
         // Build and show the foreground notification first (required before startForeground)
-        val notification = buildOngoingNotification(reminderId, eventId, isPreAlert)
+        val notification = buildOngoingNotification(reminderId, eventId, alertKind)
         startForeground(ONGOING_NOTIFICATION_ID, notification)
 
         // Post the rich reminder or event notification
         if (reminderId != -1L) {
             postReminderNotification(reminderId)
         } else {
-            postEventNotification(eventId, isPreAlert)
+            postEventNotification(eventId, alertKind)
         }
 
         // Start the alarm sound and vibration
@@ -234,7 +234,7 @@ class AlarmRingService : Service() {
         stopRunnable = null
         currentReminderId = -1L
         currentEventId = -1L
-        currentIsPreAlert = false
+        currentAlertKind = AlarmManagerHelper.ALERT_START
     }
 
     private fun releaseMediaPlayer() {
@@ -279,7 +279,7 @@ class AlarmRingService : Service() {
      * Builds the ongoing foreground notification shown while the alarm is ringing.
      * Includes "Stop" and "Snooze" action buttons.
      */
-    private fun buildOngoingNotification(reminderId: Long, eventId: Long, isPreAlert: Boolean): Notification {
+    private fun buildOngoingNotification(reminderId: Long, eventId: Long, alertKind: String): Notification {
         val stopIntent = Intent(this, DoneReceiver::class.java).apply {
             if (reminderId != -1L) {
                 putExtra(NotificationHelper.EXTRA_REMINDER_ID, reminderId)
@@ -314,7 +314,8 @@ class AlarmRingService : Service() {
 
         val title = when {
             reminderId != -1L -> "⏰ Alarm Ringing"
-            isPreAlert -> "⏰ Event Starting Soon"
+            alertKind == AlarmManagerHelper.ALERT_PRE -> "⏰ Event Starting Soon"
+            alertKind == AlarmManagerHelper.ALERT_END -> "🏁 Event Ended"
             else -> "🔔 Event Starting"
         }
 
@@ -384,7 +385,7 @@ class AlarmRingService : Service() {
         }
     }
 
-    private fun postEventNotification(eventId: Long, isPreAlert: Boolean) {
+    private fun postEventNotification(eventId: Long, alertKind: String) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val db = AppDatabase.getInstanceForWorker(applicationContext)
@@ -396,8 +397,8 @@ class AlarmRingService : Service() {
                 }
 
                 val notificationHelper = NotificationHelper(applicationContext)
-                notificationHelper.showEventNotification(event, isPreAlert)
-                Log.d(TAG, "Rich event notification posted for $eventId")
+                notificationHelper.showEventNotification(event, alertKind)
+                Log.d(TAG, "Rich event notification posted for $eventId (kind=$alertKind)")
             } catch (e: Exception) {
                 Log.e(TAG, "Error posting event notification for $eventId", e)
             }

@@ -46,6 +46,14 @@ class DoneReceiver : BroadcastReceiver() {
                         return@launch
                     }
 
+                    if (com.productivity.app.domain.reminder.Recurrence.isRecurring(reminder.recurrenceRule)) {
+                        // Recurring: dismissing this ring should not end the series.
+                        // The next occurrence was already scheduled when the alarm
+                        // fired, so we just stop ringing.
+                        Log.d(TAG, "Reminder $reminderId is recurring — dismissed this occurrence only")
+                        return@launch
+                    }
+
                     // Mark as completed in Room
                     val completedReminder = reminder.copy(isCompleted = true)
                     db.reminderDao().update(completedReminder)

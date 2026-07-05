@@ -24,17 +24,23 @@ import com.productivity.app.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CreateEventScreen(
     viewModel: ScheduleViewModel = hiltViewModel(),
+    eventId: Long = -1L,
     onNavigateBack: () -> Unit = {}
 ) {
+    val isEdit = eventId != -1L
+
     var title by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf("event") }
+    var customType by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var isAllDay by remember { mutableStateOf(false) }
+
+    val knownEventTypeIds = remember { setOf("event", "meeting", "appointment", "deadline", "custom") }
 
     // Date & time state
     val calendar = remember { Calendar.getInstance() }
@@ -52,15 +58,50 @@ fun CreateEventScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val eventTypes = listOf("event", "meeting", "appointment", "deadline")
+    val eventTypes = listOf("event", "meeting", "appointment", "deadline", "custom")
     val dateFormatter = remember { SimpleDateFormat("EEE, MMM d, yyyy", Locale.getDefault()) }
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+
+    // In edit mode, load the event and prefill the form once.
+    val existing by viewModel.selectedEvent.collectAsStateWithLifecycle()
+    var prefilled by remember { mutableStateOf(false) }
+    LaunchedEffect(eventId) {
+        if (isEdit) viewModel.loadEvent(eventId)
+    }
+    LaunchedEffect(existing) {
+        val evt = existing
+        if (isEdit && !prefilled && evt != null && evt.id == eventId) {
+            title = evt.title
+            if (evt.type in knownEventTypeIds) {
+                selectedType = evt.type
+            } else {
+                selectedType = "custom"
+                customType = evt.type
+            }
+            location = evt.location ?: ""
+            notes = evt.notes ?: ""
+            isAllDay = evt.isAllDay
+            selectedDateMillis = evt.startDatetime
+            Calendar.getInstance().apply {
+                timeInMillis = evt.startDatetime
+                startHour = get(Calendar.HOUR_OF_DAY)
+                startMinute = get(Calendar.MINUTE)
+            }
+            Calendar.getInstance().apply {
+                timeInMillis = evt.endDatetime
+                endHour = get(Calendar.HOUR_OF_DAY)
+                endMinute = get(Calendar.MINUTE)
+            }
+            prefilled = true
+        }
+    }
 
     // Handle UI events
     LaunchedEffect(Unit) {
         viewModel.uiEvent.collect { event ->
             when (event) {
                 is ScheduleUiEvent.EventCreated -> onNavigateBack()
+                is ScheduleUiEvent.EventUpdated -> onNavigateBack()
                 is ScheduleUiEvent.Error -> snackbarHostState.showSnackbar(event.message)
                 else -> {}
             }
@@ -70,7 +111,7 @@ fun CreateEventScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("New Event", fontWeight = FontWeight.SemiBold) },
+                title = { Text(if (isEdit) "Edit Event" else "New Event", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -124,7 +165,10 @@ fun CreateEventScreen(
                 color = TextSecondary
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 eventTypes.forEach { type ->
                     val isSelected = selectedType == type
                     val typeColor = getCreateEventTypeColor(type)
@@ -151,6 +195,28 @@ fun CreateEventScreen(
                         )
                     )
                 }
+            }
+
+            if (selectedType == "custom") {
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = customType,
+                    onValueChange = { customType = it },
+                    label = { Text("Custom type") },
+                    placeholder = { Text("e.g. Interview, Gym, Call") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = AccentPrimary,
+                        unfocusedBorderColor = DarkSurfaceVariant,
+                        focusedLabelColor = AccentPrimary,
+                        unfocusedLabelColor = TextTertiary,
+                        cursorColor = AccentPrimary,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -359,16 +425,33 @@ fun CreateEventScreen(
                     cal.set(Calendar.HOUR_OF_DAY, endHour)
                     cal.set(Calendar.MINUTE, endMinute)
                     val endMillis = cal.timeInMillis
+                    val resolvedEnd = if (isAllDay) startMillis + 86_400_000 else endMillis
+                    val resolvedType = if (selectedType == "custom") {
+                        customType.trim().ifBlank { "custom" }
+                    } else selectedType
 
-                    viewModel.createEvent(
-                        title = title,
-                        type = selectedType,
-                        startDatetime = startMillis,
-                        endDatetime = if (isAllDay) startMillis + 86_400_000 else endMillis,
-                        location = location,
-                        notes = notes,
-                        isAllDay = isAllDay
-                    )
+                    if (isEdit) {
+                        viewModel.updateEvent(
+                            eventId = eventId,
+                            title = title,
+                            type = resolvedType,
+                            startDatetime = startMillis,
+                            endDatetime = resolvedEnd,
+                            location = location,
+                            notes = notes,
+                            isAllDay = isAllDay
+                        )
+                    } else {
+                        viewModel.createEvent(
+                            title = title,
+                            type = resolvedType,
+                            startDatetime = startMillis,
+                            endDatetime = resolvedEnd,
+                            location = location,
+                            notes = notes,
+                            isAllDay = isAllDay
+                        )
+                    }
                 },
                 enabled = title.isNotBlank() && !isLoading,
                 modifier = Modifier
@@ -390,7 +473,7 @@ fun CreateEventScreen(
                 } else {
                     Icon(Icons.Outlined.Event, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Create Event", fontWeight = FontWeight.SemiBold)
+                    Text(if (isEdit) "Save Changes" else "Create Event", fontWeight = FontWeight.SemiBold)
                 }
             }
 

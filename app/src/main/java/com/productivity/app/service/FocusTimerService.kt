@@ -61,6 +61,10 @@ class FocusTimerService : Service() {
     private var activeSecondsAccumulator = 0
     private var activeTaskObserverJob: Job? = null
 
+    /** Focus minutes logged for the active task *today* — used to stop the
+     *  session once the task's daily target is accomplished. */
+    private var todayFocusedMinutes = 0
+
     inner class LocalBinder : Binder() {
         fun getService(): FocusTimerService = this@FocusTimerService
     }
@@ -101,6 +105,13 @@ class FocusTimerService : Service() {
         }
         _completedCycles.value = savedCompletedCycles
         activeSecondsAccumulator = 0
+
+        // Seed today's focused-minutes counter from the DB so the session stops
+        // as soon as the task's daily target is reached (even across restarts).
+        todayFocusedMinutes = 0
+        serviceScope.launch(Dispatchers.IO) {
+            todayFocusedMinutes = repository.getMinutesForTaskAndDate(task.id, today)
+        }
 
         val baseWorkMinutes = task.workDurationMinutes
         val workSeconds = if (task.enableGradualScaling) {
@@ -205,6 +216,8 @@ class FocusTimerService : Service() {
             if (activeSecondsAccumulator >= 60) {
                 activeSecondsAccumulator = 0
                 saveProgress(1)
+                todayFocusedMinutes++
+                if (maybeCompleteOnGoal()) return
             }
         }
 
@@ -286,22 +299,30 @@ class FocusTimerService : Service() {
         }
     }
 
+    /**
+     * Plays an audible cue on the ALARM stream (loud and independent of the
+     * media volume, which previously left these cues quiet or silent). Distinct
+     * tone patterns distinguish "time to break" from "back to work".
+     */
     private fun playTransitionSound(isToBreak: Boolean) {
         stopBeep()
         beepJob = serviceScope.launch(Dispatchers.IO) {
-            val volume = 100
-            val toneType = ToneGenerator.TONE_SUP_ERROR
-            val toneDurationMs = if (isToBreak) 250 else 700
-            val intervalMs = if (isToBreak) 1500L else 1000L
-            val totalDurationMs = 10000L
-            val startTime = System.currentTimeMillis()
-            
+            // Tone choices are deliberately prominent and clearly different.
+            val toneType = if (isToBreak) ToneGenerator.TONE_CDMA_ALERT_NETWORK_LITE
+            else ToneGenerator.TONE_CDMA_HIGH_L
+            val toneDurationMs = if (isToBreak) 600 else 800
+            val intervalMs = if (isToBreak) 900L else 1100L
+            val beepCount = 5
+
             var toneGen: ToneGenerator? = null
             try {
-                toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, volume)
-                while (isActive && (System.currentTimeMillis() - startTime) < totalDurationMs) {
+                // STREAM_ALARM at max ToneGenerator volume → reliably loud.
+                toneGen = ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
+                var played = 0
+                while (isActive && played < beepCount) {
                     toneGen.startTone(toneType, toneDurationMs)
                     delay(intervalMs)
+                    played++
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to play transition sound", e)
@@ -314,6 +335,84 @@ class FocusTimerService : Service() {
     private fun stopBeep() {
         beepJob?.cancel()
         beepJob = null
+    }
+
+    /**
+     * Returns true and ends the session if the active task's daily focus target
+     * has been reached, so the timer stops instead of cycling forever.
+     */
+    private fun maybeCompleteOnGoal(): Boolean {
+        val task = _currentTask.value ?: return false
+        val target = task.dailyTargetMinutes
+        if (target > 0 && todayFocusedMinutes >= target) {
+            completeGoal(task)
+            return true
+        }
+        return false
+    }
+
+    private fun completeGoal(task: FocusTask) {
+        Log.d(TAG, "Daily focus target reached for task ${task.id} ($todayFocusedMinutes/${task.dailyTargetMinutes} min) — stopping session")
+        tickerJob?.cancel()
+        activeTaskObserverJob?.cancel()
+        activeTaskObserverJob = null
+
+        _timerState.value = TimerState.IDLE
+        _secondsRemaining.value = 0
+        _maxSeconds.value = 0
+        _completedCycles.value = 0
+        activeSecondsAccumulator = 0
+        val finishedTitle = task.title
+        val achieved = todayFocusedMinutes
+        val goal = task.dailyTargetMinutes
+        _currentTask.value = null
+        todayFocusedMinutes = 0
+
+        saveStateToPrefs()
+        postGoalReachedNotification(finishedTitle, achieved, goal)
+
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        // Let the completion sound play briefly before the service exits.
+        serviceScope.launch {
+            playGoalReachedTone()
+            delay(3000)
+            stopSelf()
+        }
+    }
+
+    private suspend fun playGoalReachedTone() = withContext(Dispatchers.IO) {
+        var toneGen: ToneGenerator? = null
+        try {
+            toneGen = ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
+            repeat(3) {
+                toneGen.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
+                delay(550)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to play goal-reached tone", e)
+        } finally {
+            toneGen?.release()
+        }
+    }
+
+    private fun postGoalReachedNotification(title: String, achieved: Int, goal: Int) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 4, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(this, CHANNEL_GOAL_ID)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("🎯 Focus goal reached!")
+            .setContentText("$title — $achieved of $goal min done today. Timer stopped.")
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .build()
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_GOAL_ID, notification)
     }
 
     private fun saveStateToPrefs() {
@@ -368,6 +467,7 @@ class FocusTimerService : Service() {
                 val task = repository.getTaskById(activeTaskId)
                 if (task != null) {
                     _currentTask.value = task
+                    todayFocusedMinutes = repository.getMinutesForTaskAndDate(activeTaskId, today)
                     startObservingActiveTask(activeTaskId)
                     _completedCycles.value = savedCompletedCycles
                     activeSecondsAccumulator = savedAccumulator
@@ -466,6 +566,15 @@ class FocusTimerService : Service() {
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
+
+            val goalChannel = NotificationChannel(
+                CHANNEL_GOAL_ID,
+                "Focus Goal Reached",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alerts when a focus task's daily target is completed"
+            }
+            manager.createNotificationChannel(goalChannel)
         }
     }
 
@@ -570,7 +679,9 @@ class FocusTimerService : Service() {
     companion object {
         private const val TAG = "FocusTimerService"
         const val CHANNEL_ID = "channel_focus_timer"
+        const val CHANNEL_GOAL_ID = "channel_focus_goal"
         const val NOTIFICATION_ID = 1001
+        const val NOTIFICATION_GOAL_ID = 1002
 
         const val ACTION_PAUSE = "com.productivity.app.ACTION_PAUSE"
         const val ACTION_RESUME = "com.productivity.app.ACTION_RESUME"

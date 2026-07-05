@@ -24,6 +24,10 @@ data class ScheduleEvent(
 
     val notes: String? = null,
 
+    /** Permanent link to a Notion note/page created for this event (e.g. meeting notes). */
+    @ColumnInfo(name = "notion_page_url")
+    val notionPageUrl: String? = null,
+
     @ColumnInfo(name = "is_all_day")
     val isAllDay: Boolean = false,
 

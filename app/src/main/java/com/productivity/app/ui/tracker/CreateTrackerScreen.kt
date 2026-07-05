@@ -29,6 +29,19 @@ fun CreateTrackerScreen(
     var description by remember { mutableStateOf("") }
     val modules = remember { mutableStateListOf("") }
 
+    // Guided module setup for courses
+    var moduleMode by remember { mutableStateOf("auto") } // "auto" | "manual"
+    var moduleCountText by remember { mutableStateOf("") }
+    var modulePrefix by remember { mutableStateOf("Module") }
+
+    val autoModuleCount = moduleCountText.toIntOrNull() ?: 0
+    fun buildCourseModules(): List<String> = if (moduleMode == "auto") {
+        val prefix = modulePrefix.ifBlank { "Module" }
+        (1..autoModuleCount).map { "$prefix $it" }
+    } else {
+        modules.filter { it.isNotBlank() }
+    }
+
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -147,29 +160,70 @@ fun CreateTrackerScreen(
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // ── Course Modules Input ─────────────────────────
+            // ── Course Modules Setup ─────────────────────────
             if (selectedType == "course") {
                 Spacer(modifier = Modifier.height(24.dp))
-                
+
                 Text(
-                    text = "Modules List",
+                    text = "Modules",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = TextPrimary
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                modules.forEachIndexed { index, moduleTitle ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                    ) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Set up all your modules at once, or list them yourself.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Mode switch
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = moduleMode == "auto",
+                        onClick = { moduleMode = "auto" },
+                        label = { Text("Generate by count") },
+                        leadingIcon = { Icon(Icons.Outlined.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = InfoBlue.copy(alpha = 0.2f),
+                            selectedLabelColor = InfoBlue,
+                            selectedLeadingIconColor = InfoBlue,
+                            containerColor = DarkSurface,
+                            labelColor = TextSecondary,
+                            iconColor = TextSecondary
+                        )
+                    )
+                    FilterChip(
+                        selected = moduleMode == "manual",
+                        onClick = { moduleMode = "manual" },
+                        label = { Text("List manually") },
+                        leadingIcon = { Icon(Icons.Outlined.FormatListNumbered, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = InfoBlue.copy(alpha = 0.2f),
+                            selectedLabelColor = InfoBlue,
+                            selectedLeadingIconColor = InfoBlue,
+                            containerColor = DarkSurface,
+                            labelColor = TextSecondary,
+                            iconColor = TextSecondary
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (moduleMode == "auto") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedTextField(
-                            value = moduleTitle,
-                            onValueChange = { modules[index] = it },
-                            placeholder = { Text("Module ${index + 1} Title") },
+                            value = moduleCountText,
+                            onValueChange = { new -> moduleCountText = new.filter { it.isDigit() }.take(4) },
+                            label = { Text("How many?") },
+                            placeholder = { Text("e.g. 100") },
                             singleLine = true,
-                            modifier = Modifier.weight(1f),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                            ),
+                            modifier = Modifier.weight(0.9f),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = InfoBlue,
                                 unfocusedBorderColor = DarkSurfaceVariant,
@@ -181,34 +235,76 @@ fun CreateTrackerScreen(
                             ),
                             shape = RoundedCornerShape(10.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(
-                            onClick = { 
-                                if (modules.size > 1) {
-                                    modules.removeAt(index)
-                                } else {
-                                    modules[0] = ""
-                                }
-                            }
+                        OutlinedTextField(
+                            value = modulePrefix,
+                            onValueChange = { modulePrefix = it.take(20) },
+                            label = { Text("Label") },
+                            placeholder = { Text("Module") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1.1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = InfoBlue,
+                                unfocusedBorderColor = DarkSurfaceVariant,
+                                focusedLabelColor = InfoBlue,
+                                unfocusedLabelColor = TextTertiary,
+                                cursorColor = InfoBlue,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+                    if (autoModuleCount > 0) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        val prefix = modulePrefix.ifBlank { "Module" }
+                        Text(
+                            text = "Creates $autoModuleCount modules: “$prefix 1”, “$prefix 2”, … “$prefix $autoModuleCount”. You can add more anytime from the tracker.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = InfoBlue
+                        )
+                    }
+                } else {
+                    modules.forEachIndexed { index, moduleTitle ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Delete,
-                                contentDescription = "Delete Module",
-                                tint = AccentPrimary
+                            OutlinedTextField(
+                                value = moduleTitle,
+                                onValueChange = { modules[index] = it },
+                                placeholder = { Text("Module ${index + 1} title") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = InfoBlue,
+                                    unfocusedBorderColor = DarkSurfaceVariant,
+                                    focusedLabelColor = InfoBlue,
+                                    unfocusedLabelColor = TextTertiary,
+                                    cursorColor = InfoBlue,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary
+                                ),
+                                shape = RoundedCornerShape(10.dp)
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = {
+                                    if (modules.size > 1) modules.removeAt(index) else modules[0] = ""
+                                }
+                            ) {
+                                Icon(Icons.Outlined.Delete, contentDescription = "Delete module", tint = AccentPrimary)
+                            }
                         }
                     }
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                TextButton(
-                    onClick = { modules.add("") },
-                    colors = ButtonDefaults.textButtonColors(contentColor = InfoBlue)
-                ) {
-                    Icon(imageVector = Icons.Outlined.Add, contentDescription = null)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add Module")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { modules.add("") },
+                        colors = ButtonDefaults.textButtonColors(contentColor = InfoBlue)
+                    ) {
+                        Icon(Icons.Outlined.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add module")
+                    }
                 }
             }
 
@@ -218,12 +314,11 @@ fun CreateTrackerScreen(
             Button(
                 onClick = {
                     if (selectedType == "course") {
-                        val nonEmptyModules = modules.filter { it.isNotBlank() }
                         viewModel.createTrackerWithModules(
                             title = title,
                             type = selectedType,
                             description = description,
-                            modules = nonEmptyModules
+                            modules = buildCourseModules()
                         )
                     } else {
                         viewModel.createTracker(
@@ -233,7 +328,8 @@ fun CreateTrackerScreen(
                         )
                     }
                 },
-                enabled = title.isNotBlank() && !isLoading,
+                enabled = title.isNotBlank() && !isLoading &&
+                    (selectedType != "course" || buildCourseModules().isNotEmpty()),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),

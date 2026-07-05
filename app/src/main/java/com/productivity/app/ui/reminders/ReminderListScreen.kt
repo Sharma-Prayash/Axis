@@ -258,6 +258,16 @@ private fun ReminderCard(
                             border = null
                         )
                     }
+
+                    if (com.productivity.app.domain.reminder.Recurrence.isRecurring(reminder.recurrenceRule)) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Outlined.Repeat,
+                            contentDescription = "Repeats",
+                            tint = AccentTertiary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
             }
 

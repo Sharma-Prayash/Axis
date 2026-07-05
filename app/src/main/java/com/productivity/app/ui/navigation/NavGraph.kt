@@ -95,6 +95,21 @@ fun NavGraph(
             val reminderId = backStackEntry.arguments?.getLong("reminderId") ?: return@composable
             ReminderDetailScreen(
                 reminderId = reminderId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToEdit = { id ->
+                    navController.navigate(Screen.EditReminder.createRoute(id))
+                }
+            )
+        }
+        composable(
+            route = Screen.EditReminder.route,
+            arguments = listOf(
+                navArgument("reminderId") { type = NavType.LongType }
+            )
+        ) { backStackEntry ->
+            val reminderId = backStackEntry.arguments?.getLong("reminderId") ?: return@composable
+            CreateReminderScreen(
+                reminderId = reminderId,
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -132,6 +147,21 @@ fun NavGraph(
             val eventId = backStackEntry.arguments?.getLong("eventId") ?: return@composable
             EventDetailScreen(
                 eventId = eventId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToEdit = { id ->
+                    navController.navigate(Screen.EditEvent.createRoute(id))
+                }
+            )
+        }
+        composable(
+            route = Screen.EditEvent.route,
+            arguments = listOf(
+                navArgument("eventId") { type = NavType.LongType }
+            )
+        ) { backStackEntry ->
+            val eventId = backStackEntry.arguments?.getLong("eventId") ?: return@composable
+            CreateEventScreen(
+                eventId = eventId,
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -162,7 +192,10 @@ fun NavGraph(
             val trackerId = backStackEntry.arguments?.getLong("trackerId") ?: return@composable
             TrackerDetailScreen(
                 trackerId = trackerId,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToFocusTimer = { taskId ->
+                    navController.navigate(Screen.FocusTimer.createRoute(taskId))
+                }
             )
         }
 

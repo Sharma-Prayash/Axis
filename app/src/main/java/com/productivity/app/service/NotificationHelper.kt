@@ -265,7 +265,9 @@ class NotificationHelper @Inject constructor(
      * Builds and posts a notification for the given schedule event.
      * Sound is played by AlarmRingService, so the notification is silent.
      */
-    fun showEventNotification(event: ScheduleEvent, isPreAlert: Boolean) {
+    fun showEventNotification(event: ScheduleEvent, alertKind: String) {
+        val isPreAlert = alertKind == AlarmManagerHelper.ALERT_PRE
+        val isEnd = alertKind == AlarmManagerHelper.ALERT_END
         val channelId = getChannelForType(event.type)
         val notificationId = event.id.toInt() + 100000
 
@@ -292,23 +294,24 @@ class NotificationHelper @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val title = if (isPreAlert) {
-            "⏰ Upcoming Event: ${event.title}"
-        } else {
-            "🔔 Event Starting: ${event.title}"
+        val title = when {
+            isEnd -> "🏁 Event Ended: ${event.title}"
+            isPreAlert -> "⏰ Upcoming Event: ${event.title}"
+            else -> "🔔 Event Starting: ${event.title}"
         }
 
         val timeFormatter = SimpleDateFormat("h:mm a", Locale.getDefault())
-        val timeStr = timeFormatter.format(Date(event.startDatetime))
+        val startStr = timeFormatter.format(Date(event.startDatetime))
+        val endStr = timeFormatter.format(Date(event.endDatetime))
 
         val contentText = buildString {
-            if (isPreAlert) {
-                append("Starts in 5 minutes ($timeStr)")
-            } else {
-                append("Starting now ($timeStr)")
+            when {
+                isEnd -> append("Ended at $endStr")
+                isPreAlert -> append("Starts in 5 minutes ($startStr)")
+                else -> append("Starting now ($startStr)")
             }
             if (!event.location.isNullOrBlank()) {
-                append(" at ${event.location}")
+                append(" · ${event.location}")
             }
         }
 
@@ -352,7 +355,7 @@ class NotificationHelper @Inject constructor(
         }
 
         NotificationManagerCompat.from(context).notify(notificationId, notification)
-        Log.d(TAG, "Posted notification for event ${event.id} (isPreAlert=$isPreAlert)")
+        Log.d(TAG, "Posted notification for event ${event.id} (kind=$alertKind)")
     }
 
     /**

@@ -8,6 +8,7 @@ import com.productivity.app.domain.reminder.CompleteReminderUseCase
 import com.productivity.app.domain.reminder.DeleteReminderUseCase
 import com.productivity.app.domain.reminder.ScheduleReminderUseCase
 import com.productivity.app.domain.reminder.SnoozeReminderUseCase
+import com.productivity.app.domain.reminder.UpdateReminderUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -19,7 +20,8 @@ class ReminderViewModel @Inject constructor(
     private val scheduleReminderUseCase: ScheduleReminderUseCase,
     private val snoozeReminderUseCase: SnoozeReminderUseCase,
     private val completeReminderUseCase: CompleteReminderUseCase,
-    private val deleteReminderUseCase: DeleteReminderUseCase
+    private val deleteReminderUseCase: DeleteReminderUseCase,
+    private val updateReminderUseCase: UpdateReminderUseCase
 ) : ViewModel() {
 
     /** Active (non-completed) reminders, ordered by datetime ascending */
@@ -68,6 +70,42 @@ class ReminderViewModel @Inject constructor(
                 _uiEvent.emit(ReminderUiEvent.ReminderCreated)
             } catch (e: Exception) {
                 _uiEvent.emit(ReminderUiEvent.Error("Failed to create reminder: ${e.message}"))
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Updates an existing reminder and reschedules its alarm.
+     */
+    fun updateReminder(
+        reminderId: Long,
+        title: String,
+        type: String,
+        datetime: Long,
+        priority: String,
+        recurrenceRule: String?
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val existing = reminderRepository.getReminderById(reminderId) ?: run {
+                    _uiEvent.emit(ReminderUiEvent.Error("Reminder no longer exists"))
+                    return@launch
+                }
+                updateReminderUseCase(
+                    existing.copy(
+                        title = title,
+                        type = type,
+                        datetime = datetime,
+                        priority = priority,
+                        recurrenceRule = recurrenceRule
+                    )
+                )
+                _uiEvent.emit(ReminderUiEvent.ReminderUpdated)
+            } catch (e: Exception) {
+                _uiEvent.emit(ReminderUiEvent.Error("Failed to update reminder: ${e.message}"))
             } finally {
                 _isLoading.value = false
             }
@@ -143,6 +181,7 @@ class ReminderViewModel @Inject constructor(
 /** One-shot UI events emitted by the ViewModel */
 sealed class ReminderUiEvent {
     data object ReminderCreated : ReminderUiEvent()
+    data object ReminderUpdated : ReminderUiEvent()
     data object ReminderCompleted : ReminderUiEvent()
     data class ReminderSnoozed(val durationMinutes: Int) : ReminderUiEvent()
     data object ReminderDeleted : ReminderUiEvent()

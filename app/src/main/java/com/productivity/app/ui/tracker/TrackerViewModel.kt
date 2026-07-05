@@ -4,9 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.productivity.app.data.model.ProgressTracker
 import com.productivity.app.data.model.ProgressUnit
+import com.productivity.app.data.model.FocusTask
 import com.productivity.app.data.repository.TrackerRepository
+import com.productivity.app.data.repository.FocusRepository
 import com.productivity.app.domain.tracker.AddProgressUnitUseCase
 import com.productivity.app.domain.tracker.CompleteProgressUnitUseCase
+import com.productivity.app.domain.tracker.UncompleteProgressUnitUseCase
 import com.productivity.app.domain.tracker.CreateTrackerUseCase
 import com.productivity.app.domain.tracker.DeleteTrackerUseCase
 import com.productivity.app.data.model.WeeklyGoal
@@ -27,7 +30,9 @@ class TrackerViewModel @Inject constructor(
     private val createTrackerWithModulesUseCase: CreateTrackerWithModulesUseCase,
     private val addProgressUnitUseCase: AddProgressUnitUseCase,
     private val completeProgressUnitUseCase: CompleteProgressUnitUseCase,
-    private val deleteTrackerUseCase: DeleteTrackerUseCase
+    private val uncompleteProgressUnitUseCase: UncompleteProgressUnitUseCase,
+    private val deleteTrackerUseCase: DeleteTrackerUseCase,
+    private val focusRepository: FocusRepository
 ) : ViewModel() {
 
     /** Active (non-completed) trackers */
@@ -61,6 +66,11 @@ class TrackerViewModel @Inject constructor(
         } else {
             flowOf(null)
         }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** Focus task linked to the selected tracker, if the user has defined one. */
+    val linkedFocusTask: StateFlow<FocusTask?> = _selectedTracker.flatMapLatest { tracker ->
+        if (tracker != null) focusRepository.getTaskForTracker(tracker.id) else flowOf(null)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val completionDatesMap: StateFlow<Map<java.time.LocalDate, Int>> = _selectedTracker.flatMapLatest { tracker ->
@@ -225,6 +235,97 @@ class TrackerViewModel @Inject constructor(
     }
 
     /**
+     * Reverses a unit completion marked by mistake.
+     */
+    fun uncompleteUnit(unitId: Long) {
+        viewModelScope.launch {
+            try {
+                uncompleteProgressUnitUseCase(unitId)
+                _selectedTracker.value?.let { tracker ->
+                    _selectedTracker.value = trackerRepository.getTrackerById(tracker.id)
+                    val weekStart = getStartOfWeekMillis()
+                    val goal = weeklyGoalRepository.getGoalForTrackerAndWeekSync(tracker.id, weekStart)
+                    if (goal != null) {
+                        val units = trackerRepository.getUnitsForTracker(tracker.id).first()
+                        val thisWeekCompleted = units.count {
+                            it.isCompleted && it.completedAt != null && it.completedAt >= weekStart
+                        }
+                        weeklyGoalRepository.updateGoal(goal.copy(achievedCount = thisWeekCompleted))
+                    }
+                }
+                _uiEvent.emit(TrackerUiEvent.UnitUpdated)
+            } catch (e: Exception) {
+                _uiEvent.emit(TrackerUiEvent.Error("Failed to undo: ${e.message}"))
+            }
+        }
+    }
+
+    /**
+     * Renames a unit and/or updates its note.
+     */
+    fun editUnit(unitId: Long, title: String, notes: String?) {
+        viewModelScope.launch {
+            try {
+                val unit = trackerRepository.getUnitById(unitId) ?: return@launch
+                trackerRepository.updateUnit(
+                    unit.copy(
+                        title = title.trim().ifBlank { unit.title },
+                        notes = notes?.takeIf { it.isNotBlank() }
+                    )
+                )
+                // Keep the tracker's denormalised "current unit" label fresh.
+                _selectedTracker.value?.let { tracker ->
+                    val units = trackerRepository.getUnitsForTracker(tracker.id).first()
+                    val nextIncomplete = units.firstOrNull { !it.isCompleted }
+                    trackerRepository.getTrackerById(tracker.id)?.let { t ->
+                        trackerRepository.updateTracker(t.copy(currentUnitLabel = nextIncomplete?.title))
+                        _selectedTracker.value = trackerRepository.getTrackerById(tracker.id)
+                    }
+                }
+                _uiEvent.emit(TrackerUiEvent.UnitUpdated)
+            } catch (e: Exception) {
+                _uiEvent.emit(TrackerUiEvent.Error("Failed to update module: ${e.message}"))
+            }
+        }
+    }
+
+    /**
+     * Defines (or updates) a focus time for the selected tracker by creating a
+     * linked [FocusTask] that appears in the Focus feature.
+     */
+    fun setTrackerFocus(dailyTargetMinutes: Int, workMinutes: Int, breakMinutes: Int) {
+        val tracker = _selectedTracker.value ?: return
+        viewModelScope.launch {
+            try {
+                val existing = focusRepository.getTaskForTrackerSync(tracker.id)
+                if (existing != null) {
+                    focusRepository.updateTask(
+                        existing.copy(
+                            title = tracker.title,
+                            dailyTargetMinutes = dailyTargetMinutes,
+                            workDurationMinutes = workMinutes,
+                            breakDurationMinutes = breakMinutes
+                        )
+                    )
+                } else {
+                    focusRepository.insertTask(
+                        FocusTask(
+                            title = tracker.title,
+                            dailyTargetMinutes = dailyTargetMinutes,
+                            workDurationMinutes = workMinutes,
+                            breakDurationMinutes = breakMinutes,
+                            linkedTrackerId = tracker.id
+                        )
+                    )
+                }
+                _uiEvent.emit(TrackerUiEvent.FocusLinked)
+            } catch (e: Exception) {
+                _uiEvent.emit(TrackerUiEvent.Error("Failed to set focus time: ${e.message}"))
+            }
+        }
+    }
+
+    /**
      * Sets or updates the weekly goal target.
      */
     fun setWeeklyGoal(targetCount: Int) {
@@ -285,5 +386,7 @@ sealed class TrackerUiEvent {
     data object TrackerCompleted : TrackerUiEvent()
     data object UnitAdded : TrackerUiEvent()
     data object UnitCompleted : TrackerUiEvent()
+    data object UnitUpdated : TrackerUiEvent()
+    data object FocusLinked : TrackerUiEvent()
     data class Error(val message: String) : TrackerUiEvent()
 }

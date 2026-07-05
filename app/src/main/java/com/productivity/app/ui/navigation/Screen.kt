@@ -70,6 +70,15 @@ sealed class Screen(
         fun createRoute(reminderId: Long) = "reminders/$reminderId"
     }
 
+    data object EditReminder : Screen(
+        route = "reminders/edit/{reminderId}",
+        title = "Edit Reminder",
+        selectedIcon = Icons.Filled.AddAlert,
+        unselectedIcon = Icons.Outlined.AddAlert
+    ) {
+        fun createRoute(reminderId: Long) = "reminders/edit/$reminderId"
+    }
+
     /** Non-bottom-nav screens for schedule CRUD */
     data object CreateEvent : Screen(
         route = "schedule/create",
@@ -85,6 +94,15 @@ sealed class Screen(
         unselectedIcon = Icons.Outlined.CalendarMonth
     ) {
         fun createRoute(eventId: Long) = "schedule/$eventId"
+    }
+
+    data object EditEvent : Screen(
+        route = "schedule/edit/{eventId}",
+        title = "Edit Event",
+        selectedIcon = Icons.Filled.CalendarMonth,
+        unselectedIcon = Icons.Outlined.CalendarMonth
+    ) {
+        fun createRoute(eventId: Long) = "schedule/edit/$eventId"
     }
 
     /** Non-bottom-nav screens for tracker CRUD */

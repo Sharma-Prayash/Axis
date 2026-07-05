@@ -24,10 +24,10 @@ class CreateScheduleEventUseCase @Inject constructor(
         val id = scheduleRepository.insert(event)
 
         if (!event.isAllDay) {
-            // Schedule alert at start time
-            alarmManagerHelper.scheduleEventAlert(id, event.startDatetime, false)
-            // Schedule pre-alert 5 minutes before start time
-            alarmManagerHelper.scheduleEventAlert(id, event.startDatetime - 5 * 60 * 1000L, true)
+            // Pre-alert 5 min before, alert at start, and an alarm when it ends.
+            alarmManagerHelper.scheduleEventAlert(id, event.startDatetime - 5 * 60 * 1000L, AlarmManagerHelper.ALERT_PRE)
+            alarmManagerHelper.scheduleEventAlert(id, event.startDatetime, AlarmManagerHelper.ALERT_START)
+            alarmManagerHelper.scheduleEventAlert(id, event.endDatetime, AlarmManagerHelper.ALERT_END)
         }
 
         return id

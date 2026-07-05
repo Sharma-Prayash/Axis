@@ -30,6 +30,11 @@ data class FocusTask(
     @ColumnInfo(name = "gradual_minutes_increment")
     val gradualMinutesIncrement: Int = 5,
 
+    /** If this focus task was created for a tracker, the tracker's id — used to
+     *  link the two so a tracker can launch its own focus session. */
+    @ColumnInfo(name = "linked_tracker_id")
+    val linkedTrackerId: Long? = null,
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis()
 )

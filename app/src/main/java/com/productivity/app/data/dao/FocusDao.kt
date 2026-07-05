@@ -13,6 +13,12 @@ interface FocusDao {
     @Query("SELECT * FROM focus_task WHERE id = :id LIMIT 1")
     suspend fun getTaskById(id: Long): FocusTask?
 
+    @Query("SELECT * FROM focus_task WHERE linked_tracker_id = :trackerId LIMIT 1")
+    fun getTaskForTracker(trackerId: Long): Flow<FocusTask?>
+
+    @Query("SELECT * FROM focus_task WHERE linked_tracker_id = :trackerId LIMIT 1")
+    suspend fun getTaskForTrackerSync(trackerId: Long): FocusTask?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: FocusTask): Long
 

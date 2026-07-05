@@ -105,6 +105,8 @@ class FocusViewModel @Inject constructor(
                 breakDurationMinutes = breakMinutes,
                 enableGradualScaling = enableGradualScaling,
                 gradualMinutesIncrement = gradualIncrement,
+                // Preserve the tracker link so editing doesn't unlink it.
+                linkedTrackerId = existing?.linkedTrackerId,
                 createdAt = createdAt
             )
             repository.updateTask(updatedTask)

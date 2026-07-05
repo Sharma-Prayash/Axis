@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -49,16 +50,24 @@ fun ScheduleListScreen(
         }
     }
 
-    // Generate the day selector: selectedDate ± 6 days
-    val days = remember(selectedDate) {
-        val calendar = Calendar.getInstance().apply { timeInMillis = selectedDate }
-        calendar.add(Calendar.DAY_OF_MONTH, -6)
-        (0 until 13).map { i ->
+    // Stable day strip: a 21-day window anchored 3 days before today so it
+    // doesn't jump around when a day is tapped.
+    val todayMillis = remember { System.currentTimeMillis() }
+    val days = remember {
+        val calendar = Calendar.getInstance().apply { timeInMillis = todayMillis }
+        calendar.add(Calendar.DAY_OF_MONTH, -3)
+        (0 until 21).map {
             val dayMillis = calendar.timeInMillis
             calendar.add(Calendar.DAY_OF_MONTH, 1)
             dayMillis
         }
     }
+    val dayStripState = rememberLazyListState()
+    LaunchedEffect(selectedDate) {
+        val idx = days.indexOfFirst { isSameDay(it, selectedDate) }
+        if (idx >= 0) dayStripState.animateScrollToItem(idx.coerceAtLeast(0))
+    }
+    val isViewingToday = isSameDay(selectedDate, todayMillis)
 
     Scaffold(
         containerColor = DarkBackground,
@@ -109,6 +118,11 @@ fun ScheduleListScreen(
                             color = TextPrimary
                         )
                     }
+                    if (!isViewingToday) {
+                        TextButton(onClick = { viewModel.setDate(System.currentTimeMillis()) }) {
+                            Text("Today", color = AccentPrimary, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                     IconButton(onClick = { showDatePicker = true }) {
                         Icon(
                             imageVector = Icons.Outlined.CalendarToday,
@@ -156,6 +170,7 @@ fun ScheduleListScreen(
                 }
 
                 LazyRow(
+                    state = dayStripState,
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -324,18 +339,50 @@ private fun EventCard(
             .clickable(onClick = onClick)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Type indicator bar
+            // Leading time column
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.width(58.dp)
+            ) {
+                if (event.isAllDay) {
+                    Icon(
+                        imageVector = Icons.Outlined.WbSunny,
+                        contentDescription = null,
+                        tint = typeColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "All day",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary
+                    )
+                } else {
+                    Text(
+                        text = timeFormatter.format(Date(event.startDatetime)),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = timeFormatter.format(Date(event.endDatetime)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary
+                    )
+                }
+            }
+
+            // Colored divider
             Box(
                 modifier = Modifier
-                    .width(4.dp)
-                    .height(48.dp)
+                    .padding(horizontal = 12.dp)
+                    .width(3.dp)
+                    .height(44.dp)
                     .clip(RoundedCornerShape(2.dp))
                     .background(typeColor)
             )
-            Spacer(modifier = Modifier.width(14.dp))
 
             // Event info
             Column(modifier = Modifier.weight(1f)) {
@@ -347,35 +394,24 @@ private fun EventCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(3.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Outlined.AccessTime,
+                        imageVector = getEventTypeIcon(event.type),
                         contentDescription = null,
-                        tint = TextTertiary,
-                        modifier = Modifier.size(14.dp)
+                        tint = typeColor,
+                        modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (event.isAllDay) "All Day"
-                        else "${timeFormatter.format(Date(event.startDatetime))} – ${timeFormatter.format(Date(event.endDatetime))}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
+                        text = event.type.replaceFirstChar { it.uppercase() },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = typeColor
                     )
-                }
-                if (!event.location.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.LocationOn,
-                            contentDescription = null,
-                            tint = TextTertiary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
+                    if (!event.location.isNullOrBlank()) {
                         Text(
-                            text = event.location,
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "  ·  ${event.location}",
+                            style = MaterialTheme.typography.labelSmall,
                             color = TextTertiary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -384,19 +420,12 @@ private fun EventCard(
                 }
             }
 
-            // Type badge
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(typeColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
+            if (event.notionPageUrl != null) {
                 Icon(
-                    imageVector = getEventTypeIcon(event.type),
-                    contentDescription = null,
-                    tint = typeColor,
-                    modifier = Modifier.size(20.dp)
+                    imageVector = Icons.Outlined.EditNote,
+                    contentDescription = "Has Notion note",
+                    tint = TextTertiary,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }

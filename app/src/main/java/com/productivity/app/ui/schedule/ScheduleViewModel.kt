@@ -1,5 +1,6 @@
 package com.productivity.app.ui.schedule
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.productivity.app.data.model.ScheduleEvent
@@ -7,6 +8,9 @@ import com.productivity.app.data.repository.ScheduleRepository
 import com.productivity.app.domain.schedule.CreateScheduleEventUseCase
 import com.productivity.app.domain.schedule.DeleteScheduleEventUseCase
 import com.productivity.app.domain.schedule.GetDailyAgendaUseCase
+import com.productivity.app.domain.schedule.UpdateScheduleEventUseCase
+import com.productivity.app.service.NotionApiService
+import com.productivity.app.service.NotionDeepLinkHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -20,8 +24,15 @@ class ScheduleViewModel @Inject constructor(
     private val scheduleRepository: ScheduleRepository,
     private val createScheduleEventUseCase: CreateScheduleEventUseCase,
     private val deleteScheduleEventUseCase: DeleteScheduleEventUseCase,
-    private val getDailyAgendaUseCase: GetDailyAgendaUseCase
+    private val updateScheduleEventUseCase: UpdateScheduleEventUseCase,
+    private val getDailyAgendaUseCase: GetDailyAgendaUseCase,
+    private val notionApiService: NotionApiService,
+    private val notionDeepLinkHelper: NotionDeepLinkHelper
 ) : ViewModel() {
+
+    /** True while a Notion note is being created for the selected event. */
+    private val _notionLoading = MutableStateFlow(false)
+    val notionLoading: StateFlow<Boolean> = _notionLoading.asStateFlow()
 
     /** Currently selected date (default: today) */
     private val _selectedDate = MutableStateFlow(System.currentTimeMillis())
@@ -97,6 +108,46 @@ class ScheduleViewModel @Inject constructor(
     }
 
     /**
+     * Updates an existing event and reschedules its alerts.
+     */
+    fun updateEvent(
+        eventId: Long,
+        title: String,
+        type: String,
+        startDatetime: Long,
+        endDatetime: Long,
+        location: String? = null,
+        notes: String? = null,
+        isAllDay: Boolean = false
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val existing = scheduleRepository.getEventById(eventId) ?: run {
+                    _uiEvent.emit(ScheduleUiEvent.Error("Event no longer exists"))
+                    return@launch
+                }
+                updateScheduleEventUseCase(
+                    existing.copy(
+                        title = title,
+                        type = type,
+                        startDatetime = startDatetime,
+                        endDatetime = endDatetime,
+                        location = location?.takeIf { it.isNotBlank() },
+                        notes = notes?.takeIf { it.isNotBlank() },
+                        isAllDay = isAllDay
+                    )
+                )
+                _uiEvent.emit(ScheduleUiEvent.EventUpdated)
+            } catch (e: Exception) {
+                _uiEvent.emit(ScheduleUiEvent.Error("Failed to update event: ${e.message}"))
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    /**
      * Loads a specific event by ID for the detail screen.
      */
     fun loadEvent(eventId: Long) {
@@ -109,6 +160,38 @@ class ScheduleViewModel @Inject constructor(
                 _isLoading.value = false
             }
         }
+    }
+
+    /**
+     * Creates a Notion note/page for the given event (e.g. meeting notes) and
+     * permanently stores its link on the event so it can be reopened later.
+     */
+    fun createNotionNote(eventId: Long) {
+        viewModelScope.launch {
+            _notionLoading.value = true
+            try {
+                val event = scheduleRepository.getEventById(eventId) ?: run {
+                    _uiEvent.emit(ScheduleUiEvent.Error("Event no longer exists"))
+                    return@launch
+                }
+                notionApiService.createPage(event.title, "meeting")
+                    .onSuccess { url ->
+                        scheduleRepository.update(event.copy(notionPageUrl = url))
+                        _selectedEvent.value = scheduleRepository.getEventById(eventId)
+                        _uiEvent.emit(ScheduleUiEvent.NotionNoteCreated)
+                    }
+                    .onFailure { e ->
+                        _uiEvent.emit(ScheduleUiEvent.Error(e.message ?: "Failed to create Notion note"))
+                    }
+            } finally {
+                _notionLoading.value = false
+            }
+        }
+    }
+
+    /** Opens the event's saved Notion note in the Notion app (or browser). */
+    fun openNotionNote(context: Context, event: ScheduleEvent) {
+        notionDeepLinkHelper.launchNotion(context, "meeting", event.notionPageUrl)
     }
 
     /**
@@ -137,6 +220,8 @@ class ScheduleViewModel @Inject constructor(
 /** One-shot UI events emitted by the ScheduleViewModel */
 sealed class ScheduleUiEvent {
     data object EventCreated : ScheduleUiEvent()
+    data object EventUpdated : ScheduleUiEvent()
     data object EventDeleted : ScheduleUiEvent()
+    data object NotionNoteCreated : ScheduleUiEvent()
     data class Error(val message: String) : ScheduleUiEvent()
 }

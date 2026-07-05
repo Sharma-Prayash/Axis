@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.productivity.app.domain.reminder.Recurrence
 import com.productivity.app.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -28,11 +30,18 @@ import java.util.*
 @Composable
 fun CreateReminderScreen(
     viewModel: ReminderViewModel = hiltViewModel(),
+    reminderId: Long = -1L,
     onNavigateBack: () -> Unit = {}
 ) {
+    val isEdit = reminderId != -1L
+
     var title by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf("general") }
+    var customType by remember { mutableStateOf("") }
     var selectedPriority by remember { mutableStateOf("medium") }
+    var selectedRecurrence by remember { mutableStateOf(Recurrence.NONE) }
+
+    val knownReminderTypeIds = remember { setOf("medicine", "meeting", "travel", "deadline", "general", "custom") }
     var selectedDateMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var selectedHour by remember { mutableIntStateOf(Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) }
     var selectedMinute by remember { mutableIntStateOf(Calendar.getInstance().get(Calendar.MINUTE)) }
@@ -42,10 +51,38 @@ fun CreateReminderScreen(
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     val dateFormatter = remember { SimpleDateFormat("EEE, MMM d, yyyy", Locale.getDefault()) }
 
-    // Handle successful creation
+    // In edit mode, load the reminder and prefill the form once.
+    val existing by viewModel.selectedReminder.collectAsStateWithLifecycle()
+    var prefilled by remember { mutableStateOf(false) }
+    LaunchedEffect(reminderId) {
+        if (isEdit) viewModel.loadReminder(reminderId)
+    }
+    LaunchedEffect(existing) {
+        val rem = existing
+        if (isEdit && !prefilled && rem != null && rem.id == reminderId) {
+            title = rem.title
+            if (rem.type in knownReminderTypeIds) {
+                selectedType = rem.type
+            } else {
+                selectedType = "custom"
+                customType = rem.type
+            }
+            selectedPriority = rem.priority
+            selectedRecurrence = rem.recurrenceRule ?: Recurrence.NONE
+            selectedDateMillis = rem.datetime
+            Calendar.getInstance().apply {
+                timeInMillis = rem.datetime
+                selectedHour = get(Calendar.HOUR_OF_DAY)
+                selectedMinute = get(Calendar.MINUTE)
+            }
+            prefilled = true
+        }
+    }
+
+    // Navigate back on successful create or update.
     LaunchedEffect(Unit) {
         viewModel.uiEvent.collect { event ->
-            if (event is ReminderUiEvent.ReminderCreated) {
+            if (event is ReminderUiEvent.ReminderCreated || event is ReminderUiEvent.ReminderUpdated) {
                 onNavigateBack()
             }
         }
@@ -82,7 +119,7 @@ fun CreateReminderScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "New Reminder",
+                        if (isEdit) "Edit Reminder" else "New Reminder",
                         fontWeight = FontWeight.SemiBold
                     )
                 },
@@ -182,6 +219,29 @@ fun CreateReminderScreen(
                         shape = RoundedCornerShape(12.dp)
                     )
                 }
+            }
+
+            if (selectedType == "custom") {
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = customType,
+                    onValueChange = { customType = it },
+                    placeholder = { Text("Name your type (e.g. Workout)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = AccentPrimary,
+                        unfocusedBorderColor = DarkSurfaceVariant,
+                        cursorColor = AccentPrimary,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedPlaceholderColor = TextTertiary,
+                        unfocusedPlaceholderColor = TextTertiary,
+                        focusedContainerColor = DarkSurface,
+                        unfocusedContainerColor = DarkSurface
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -294,18 +354,75 @@ fun CreateReminderScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── Repeat ───────────────────────────────────────────
+            Text(
+                text = "Repeat",
+                style = MaterialTheme.typography.labelLarge,
+                color = TextSecondary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Recurrence.OPTIONS.forEach { (value, label) ->
+                    val isSelected = selectedRecurrence == value
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedRecurrence = value },
+                        label = { Text(label) },
+                        leadingIcon = if (value != Recurrence.NONE) {
+                            { Icon(Icons.Outlined.Repeat, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        } else null,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = AccentPrimary.copy(alpha = 0.2f),
+                            selectedLabelColor = AccentPrimary,
+                            selectedLeadingIconColor = AccentPrimary,
+                            containerColor = DarkSurface,
+                            labelColor = TextSecondary,
+                            iconColor = TextSecondary
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            borderColor = DarkSurfaceVariant,
+                            selectedBorderColor = AccentPrimary.copy(alpha = 0.5f),
+                            enabled = true,
+                            selected = isSelected
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(40.dp))
 
-            // ── Create Button ────────────────────────────────────
+            // ── Save Button ──────────────────────────────────────
             Button(
                 onClick = {
                     if (title.isNotBlank()) {
-                        viewModel.createReminder(
-                            title = title.trim(),
-                            type = selectedType,
-                            datetime = combinedDateTime,
-                            priority = selectedPriority
-                        )
+                        val recurrence = selectedRecurrence.ifEmpty { null }
+                        val resolvedType = if (selectedType == "custom") {
+                            customType.trim().ifBlank { "custom" }
+                        } else selectedType
+                        if (isEdit) {
+                            viewModel.updateReminder(
+                                reminderId = reminderId,
+                                title = title.trim(),
+                                type = resolvedType,
+                                datetime = combinedDateTime,
+                                priority = selectedPriority,
+                                recurrenceRule = recurrence
+                            )
+                        } else {
+                            viewModel.createReminder(
+                                title = title.trim(),
+                                type = resolvedType,
+                                datetime = combinedDateTime,
+                                priority = selectedPriority,
+                                recurrenceRule = recurrence
+                            )
+                        }
                     }
                 },
                 modifier = Modifier
@@ -321,7 +438,7 @@ fun CreateReminderScreen(
                 )
             ) {
                 Text(
-                    "Create Reminder",
+                    if (isEdit) "Save Changes" else "Create Reminder",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )

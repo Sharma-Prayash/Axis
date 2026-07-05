@@ -24,8 +24,9 @@ class UpdateScheduleEventUseCase @Inject constructor(
         // Reschedule alerts
         alarmManagerHelper.cancelEventAlerts(event.id)
         if (!event.isAllDay) {
-            alarmManagerHelper.scheduleEventAlert(event.id, event.startDatetime, false)
-            alarmManagerHelper.scheduleEventAlert(event.id, event.startDatetime - 5 * 60 * 1000L, true)
+            alarmManagerHelper.scheduleEventAlert(event.id, event.startDatetime - 5 * 60 * 1000L, AlarmManagerHelper.ALERT_PRE)
+            alarmManagerHelper.scheduleEventAlert(event.id, event.startDatetime, AlarmManagerHelper.ALERT_START)
+            alarmManagerHelper.scheduleEventAlert(event.id, event.endDatetime, AlarmManagerHelper.ALERT_END)
         }
     }
 }
